@@ -408,13 +408,24 @@ const App: React.FC = () => {
           // Rank Check
           let rank = 0;
           let totalStudents = 633; // Approx grade size
-          // Simulate rank based on total score ratio. 
-          // Max score approx: 1050 (for 6 subs) + bonus. 
-          // Let's simplified logic: 
-          const maxPossible = (result.totalScore / 1050) > 1 ? result.totalScore : 1050; // Dynamic cap
-          const ratio = result.totalScore / maxPossible;
-          // Normal distribution-ish rank
-          rank = Math.max(1, Math.floor(totalStudents * (1 - Math.pow(ratio, 2))));
+
+          // Calculate Max Possible Score dynamically based on what was tested
+          const subjectsTaken = Object.keys(result.scores);
+          const maxPossible = subjectsTaken.reduce((acc, sub) => {
+              return acc + (['chinese', 'math', 'english'].includes(sub) ? 150 : 100);
+          }, 0);
+
+          // Normal Distribution Simulation
+          // Assuming Mean = 70% (0.70), StdDev = 12% (0.12)
+          const ratio = maxPossible > 0 ? result.totalScore / maxPossible : 0;
+          const mean = 0.70;
+          const stdDev = 0.12;
+          const z = (ratio - mean) / stdDev;
+          
+          // CDF Approximation using Logistic function
+          const percentile = 1 / (1 + Math.exp(-1.702 * z));
+          
+          rank = Math.max(1, Math.floor(totalStudents * (1 - percentile)));
           
           if (rank === 1) unlockAchievement('top_rank');
           if (rank > totalStudents * 0.98) unlockAchievement('bottom_rank');
