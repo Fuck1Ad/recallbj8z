@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -28,17 +27,22 @@
         .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
         .animate-slideInRight { animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
-  }
-}
-</script>
+    <!-- 这个 importmap 其实在 Vite 打包时不是必须的，留着也行 -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react/": "https://esm.sh/react@^19.2.3/",
+        "react": "https://esm.sh/react@^19.2.3",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+      }
+    }
+    </script>
 </head>
 <body>
     <div id="root"></div>
+    
+    <!-- 👇👇👇 必须加上这一行！没有它游戏就无法启动！ 👇👇👇 -->
+    <script type="module" src="/index.tsx"></script>
+    
 </body>
 </html>
