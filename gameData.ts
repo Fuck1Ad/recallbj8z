@@ -1096,7 +1096,7 @@ export const PHASE_EVENTS: Record<Phase, GameEvent[]> = {
             id: 'evt_oi_anxiety',
             title: '精神内耗',
             description: '长期的高压生活，你总会陷入焦虑。一次次的挫折后，你开始怀疑自己是否真的适合 OI。',
-            condition: (s) => s.competition === 'OI' && s.general.mindset < 40,
+            condition: (s) => s.competition === 'OI' && s.general.mindset < 70,
             type: 'negative',
             triggerType: 'RANDOM',
             choices: [
