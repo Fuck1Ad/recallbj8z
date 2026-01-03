@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Phase, GameState, GameEvent, SubjectKey, ExamResult, SubjectStats, GeneralStats, SUBJECT_NAMES, CompetitionResultData, Achievement, GameStatus, Difficulty, Club, ClubId, WeekendActivity, OIStats, GameLogEntry } from './types';
-import { PHASE_EVENTS, BASE_EVENTS, CHAINED_EVENTS, ACHIEVEMENTS, generateStudyEvent, generateRandomFlavorEvent, SCIENCE_FESTIVAL_EVENT, NEW_YEAR_GALA_EVENT, STATUSES, DIFFICULTY_PRESETS, CHANGELOG_DATA, CLUBS, WEEKEND_ACTIVITIES } from './gameData';
+import { Phase, GameState, GameEvent, SubjectKey, ExamResult, SubjectStats, GeneralStats, SUBJECT_NAMES, CompetitionResultData, Achievement, GameStatus, Difficulty, Club, ClubId, WeekendActivity, OIStats, GameLogEntry, Talent, Item } from './types';
+import { PHASE_EVENTS, BASE_EVENTS, CHAINED_EVENTS, ACHIEVEMENTS, generateStudyEvent, generateRandomFlavorEvent, SCIENCE_FESTIVAL_EVENT, NEW_YEAR_GALA_EVENT, STATUSES, DIFFICULTY_PRESETS, CHANGELOG_DATA, CLUBS, WEEKEND_ACTIVITIES, TALENTS, SHOP_ITEMS } from './gameData';
 import StatsPanel from './components/StatsPanel';
 import ExamView from './components/ExamView';
 
@@ -12,7 +12,8 @@ const calculateProgress = (state: GameState) => {
   return Math.min(100, (state.week / state.totalWeeksInPhase) * 100);
 };
 
-const INITIAL_SUBJECTS: Record<SubjectKey, SubjectStats> = {
+// FACTORY FUNCTIONS (To ensure deep copies on reset)
+const getInitialSubjects = (): Record<SubjectKey, SubjectStats> => ({
   chinese: { aptitude: 0, level: 0 },
   math: { aptitude: 0, level: 0 },
   english: { aptitude: 0, level: 0 },
@@ -22,9 +23,9 @@ const INITIAL_SUBJECTS: Record<SubjectKey, SubjectStats> = {
   history: { aptitude: 0, level: 0 },
   geography: { aptitude: 0, level: 0 },
   politics: { aptitude: 0, level: 0 },
-};
+});
 
-const INITIAL_GENERAL: GeneralStats = {
+const getInitialGeneral = (): GeneralStats => ({
   mindset: 50,
   experience: 10,
   luck: 50,
@@ -32,26 +33,26 @@ const INITIAL_GENERAL: GeneralStats = {
   health: 80,
   money: 20,
   efficiency: 10
-};
+});
 
-const INITIAL_OI_STATS: OIStats = {
+const getInitialOIStats = (): OIStats => ({
     dp: 0,
     ds: 0,
     math: 0,
     string: 0,
     graph: 0,
     misc: 0
-};
+});
 
-const INITIAL_GAME_STATE: GameState = {
+const getInitialGameState = (): GameState => ({
     isPlaying: false,
     eventQueue: [],
     phase: Phase.INIT,
     week: 0,
     totalWeeksInPhase: 0,
-    subjects: INITIAL_SUBJECTS,
-    general: INITIAL_GENERAL,
-    oiStats: INITIAL_OI_STATS,
+    subjects: getInitialSubjects(),
+    general: getInitialGeneral(),
+    oiStats: getInitialOIStats(),
     selectedSubjects: [],
     competition: 'None',
     club: null,
@@ -76,23 +77,34 @@ const INITIAL_GAME_STATE: GameState = {
     isWeekend: false,
     weekendActionPoints: 0,
     weekendProcessed: false,
-    sleepCount: 0
-};
+    sleepCount: 0,
+    talents: [],
+    inventory: []
+});
+
+const INITIAL_GENERAL_CONST = getInitialGeneral(); // Keep for UI reference in custom mode
 
 // --- Main App Component ---
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'HOME' | 'GAME'>('HOME');
+  const [view, setView] = useState<'HOME' | 'TALENTS' | 'GAME'>('HOME');
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('NORMAL');
-  const [customStats, setCustomStats] = useState<GeneralStats>(INITIAL_GENERAL);
+  const [customStats, setCustomStats] = useState<GeneralStats>(getInitialGeneral());
   const [showChangelog, setShowChangelog] = useState(false);
   const [showClubSelection, setShowClubSelection] = useState(false); // UI State for club modal
+  const [showShop, setShowShop] = useState(false); // UI State for shop
   
   // Game State
-  const [state, setState] = useState<GameState>(INITIAL_GAME_STATE);
+  const [state, setState] = useState<GameState>(getInitialGameState());
   const [showHistory, setShowHistory] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+
+  // Talent Selection State
+  const [availableTalents, setAvailableTalents] = useState<Talent[]>([]);
+  const [selectedTalents, setSelectedTalents] = useState<Talent[]>([]);
+  const [talentPoints, setTalentPoints] = useState(3); // Initial Points, user starts with 3
+
 
   // New State for Weekend Activity Result Modal
   const [weekendResult, setWeekendResult] = useState<{
@@ -162,12 +174,35 @@ const App: React.FC = () => {
   }, [state.eventQueue, state.currentEvent, state.popupCompetitionResult, state.isWeekend, weekendResult]);
 
 
-  const startGame = () => {
-    // FIX: Reset UI states that might persist from previous session
-    setWeekendResult(null);
-    setShowClubSelection(false);
+  const prepareGame = () => {
+      // 1. Reset UI
+      setWeekendResult(null);
+      setShowClubSelection(false);
+      
+      // 2. Roll Random Talents
+      // Ensure we get a mix of good and bad
+      const pool = [...TALENTS];
+      const buffs = pool.filter(t => t.cost > 0).sort(() => 0.5 - Math.random()).slice(0, 5); // 5 Positives
+      const debuffs = pool.filter(t => t.cost < 0).sort(() => 0.5 - Math.random()).slice(0, 4); // 4 Negatives
+      
+      const mixed = [...buffs, ...debuffs].sort(() => 0.5 - Math.random()); // Shuffle
 
-    const rolledSubjects = { ...INITIAL_SUBJECTS };
+      setAvailableTalents(mixed);
+      setSelectedTalents([]);
+      
+      // Points based on difficulty
+      let initialPoints = 3;
+      if (selectedDifficulty === 'HARD') initialPoints = 1;
+      if (selectedDifficulty === 'REALITY') initialPoints = 0;
+      
+      setTalentPoints(initialPoints); 
+
+      setView('TALENTS');
+  }
+
+  const startGame = () => {
+    // GENERATE FRESH STATE
+    const rolledSubjects = getInitialSubjects();
     (Object.keys(rolledSubjects) as SubjectKey[]).forEach(k => {
       rolledSubjects[k] = {
         aptitude: Math.floor(Math.random() * 40 + 60),
@@ -181,7 +216,7 @@ const App: React.FC = () => {
       }
     });
 
-    let initialGeneral = { ...INITIAL_GENERAL };
+    let initialGeneral = getInitialGeneral();
     let initialStatuses: GameStatus[] = [];
 
     // Apply Difficulty Logic
@@ -197,22 +232,40 @@ const App: React.FC = () => {
         initialStatuses.push({ ...STATUSES['debt'], duration: 2 }); // Initial debt pressure
     }
 
+    // Initialize fresh state to avoid pollution
+    let tempState: GameState = {
+        ...getInitialGameState(),
+        subjects: rolledSubjects,
+        general: initialGeneral,
+        activeStatuses: initialStatuses,
+        talents: selectedTalents,
+        oiStats: getInitialOIStats(),
+        romancePartner: null // Explicitly clear partner
+    };
+
+    // Apply Talent Effects
+    selectedTalents.forEach(t => {
+        if (t.effect) {
+             const updates = t.effect(tempState);
+             // Manually merge because Typescript partials can be shallow
+             if(updates.general) tempState.general = { ...tempState.general, ...updates.general };
+             if(updates.subjects) tempState.subjects = { ...tempState.subjects, ...updates.subjects }; 
+             if(updates.oiStats) tempState.oiStats = { ...tempState.oiStats, ...updates.oiStats };
+        }
+    });
+
+
     const firstEvent = PHASE_EVENTS[Phase.SUMMER].find(e => e.id === 'sum_goal_selection');
     
-    // CRITICAL FIX: Reset ALL state variables using INITIAL_GAME_STATE
-    // We only preserve unlockedAchievements from previous state
+    // Final State Initialization
     setState(prev => ({
-      ...INITIAL_GAME_STATE, // Reset base structure
-      unlockedAchievements: prev.unlockedAchievements, // Persist achievements
+      ...tempState, // Use modified fresh state
+      unlockedAchievements: prev.unlockedAchievements, // Persist achievements from previous session
       
       // New Game Setup
       phase: Phase.SUMMER,
       week: 1,
       totalWeeksInPhase: 5,
-      subjects: rolledSubjects,
-      general: initialGeneral,
-      activeStatuses: initialStatuses,
-      oiStats: INITIAL_OI_STATS,
       
       currentEvent: firstEvent || null,
       triggeredEvents: firstEvent ? [firstEvent.id] : [],
@@ -220,7 +273,7 @@ const App: React.FC = () => {
       
       className: '待分班',
       club: null,
-      romancePartner: null, // Explicitly ensure this is null
+      romancePartner: null, // Double check
       competition: 'None',
       
       difficulty: selectedDifficulty,
@@ -232,6 +285,26 @@ const App: React.FC = () => {
     
     setView('GAME');
     setTimeout(() => unlockAchievement('first_blood'), 100);
+  };
+
+  const handleTalentToggle = (talent: Talent) => {
+      const isSelected = selectedTalents.find(t => t.id === talent.id);
+      
+      if (isSelected) {
+          // Deselect: Refund/Remove cost
+          setTalentPoints(prev => prev + talent.cost);
+          setSelectedTalents(prev => prev.filter(t => t.id !== talent.id));
+      } else {
+          // Select: Check if we can select (limit max talents if we want, or just points)
+          // Let's limit to max 5 talents total for UI sanity, but points are the main constraint
+          if (selectedTalents.length >= 5) {
+              // Optional: Provide feedback like "Too many talents"
+              return;
+          }
+          
+          setTalentPoints(prev => prev - talent.cost);
+          setSelectedTalents(prev => [...prev, talent]);
+      }
   };
 
   const endGame = () => {
@@ -481,8 +554,6 @@ const App: React.FC = () => {
     setState(prev => {
       const updates = choice.action(prev);
       const diff: string[] = [];
-
-      // Diff Logic (Simplified for brevity, same as before)
       if (updates.general) {
           const newG = updates.general as GeneralStats;
           const oldG = prev.general;
@@ -523,12 +594,9 @@ const App: React.FC = () => {
         if (s.chainedEvent) nextEvent = s.chainedEvent;
 
         if (nextEvent) {
-             // If chained, process immediately, queue stays same
              return { ...s, currentEvent: nextEvent, chainedEvent: null, eventResult: null, triggeredEvents: [...s.triggeredEvents, nextEvent.id] };
         }
         
-        // No chain, clear current, effect will pick up next in queue
-        // AUTO-RESUME Logic: Set isPlaying to true after event
         return { ...s, currentEvent: null, eventResult: null, isPlaying: true };
     });
   };
@@ -543,21 +611,35 @@ const App: React.FC = () => {
       setShowClubSelection(false);
   };
 
+  const handleShopPurchase = (item: Item) => {
+      setState(prev => {
+          if (prev.general.money < item.price) {
+              return prev;
+          }
+          const updates = item.effect(prev);
+          const nextGeneral = { ...prev.general, ...updates.general };
+          
+          return {
+              ...prev,
+              ...updates,
+              general: nextGeneral,
+              inventory: [...prev.inventory, item.id],
+              log: [...prev.log, { message: `购买了${item.name}，消费${item.price}元。`, type: 'success', timestamp: Date.now() }]
+          };
+      });
+  };
+
   const handleWeekendActivityClick = (activity: WeekendActivity) => {
-      // Calculate outcome but don't apply it yet
-      // This is for the "Preview/Result" modal
       const updates = activity.action(state);
       const newState = {
           ...state,
           ...updates,
           general: { ...state.general, ...(updates.general || {}) },
           sleepCount: (state.sleepCount || 0) + (updates.sleepCount as number || 0),
-          // We don't decrement AP yet
       };
       if (updates.subjects) newState.subjects = { ...state.subjects, ...updates.subjects };
       if (updates.oiStats) newState.oiStats = { ...state.oiStats, ...updates.oiStats };
 
-      // Calculate Diff for display
       const diff: string[] = [];
       const newG = newState.general;
       const oldG = state.general;
@@ -609,44 +691,34 @@ const App: React.FC = () => {
           let logMsg = '';
           let nextTotalWeeks = prev.totalWeeksInPhase;
 
-          // Rank Check
           let rank = 0;
-          let totalStudents = 633; // Approx grade size
+          let totalStudents = 633; 
 
-          // Calculate Max Possible Score dynamically based on what was tested
           const subjectsTaken = Object.keys(result.scores);
           let maxPossible = 0;
           if (prev.phase === Phase.CSP_EXAM || prev.phase === Phase.NOIP_EXAM) {
-              maxPossible = 400; // OI usually 400
+              maxPossible = 400; 
           } else {
              maxPossible = subjectsTaken.reduce((acc, sub) => {
                 return acc + (['chinese', 'math', 'english'].includes(sub) ? 150 : 100);
              }, 0);
           }
 
-          // UPDATE: Rank calculation optimized
           if (result.totalScore >= maxPossible) {
-              rank = 1; // Force rank 1 for perfect score
+              rank = 1; 
           } else {
-              // Normal Distribution Simulation with adjusted parameters
               const ratio = maxPossible > 0 ? result.totalScore / maxPossible : 0;
-              const mean = 0.68; // Slightly lower mean to help player
-              const stdDev = 0.15; // Larger spread
+              const mean = 0.68;
+              const stdDev = 0.15;
               const z = (ratio - mean) / stdDev;
-              
-              // CDF Approximation using Logistic function
               const percentile = 1 / (1 + Math.exp(-1.702 * z));
-              
               rank = Math.max(1, Math.floor(totalStudents * (1 - percentile)) + 1);
           }
           
           if (rank === 1) unlockAchievement('top_rank');
           if (rank > totalStudents * 0.98) unlockAchievement('bottom_rank');
-          
-          // Achievement: Sleep God
           if (prev.sleepCount >= 20 && rank <= 50) unlockAchievement('sleep_god');
 
-          // Achievement Check: Nerd (Perfect Score)
           let perfectScore = false;
           Object.entries(result.scores).forEach(([sub, score]) => {
               const max = ['chinese', 'math', 'english'].includes(sub) ? 150 : 100;
@@ -713,7 +785,6 @@ const App: React.FC = () => {
       });
   };
   
-  // Helper to determine Exam Title
   const getExamTitle = () => {
       switch(state.phase) {
           case Phase.PLACEMENT_EXAM: return "分班考试";
@@ -725,7 +796,6 @@ const App: React.FC = () => {
       }
   };
 
-  // Helper for Ending Calculation
   const getEndingAnalysis = () => {
       const { general, examResult, activeStatuses, sleepCount, competitionResults, competition, unlockedAchievements } = state;
       let title = "普通高中生";
@@ -733,17 +803,14 @@ const App: React.FC = () => {
       let comment = "你的高中生活波澜不惊。";
       let score = 0;
 
-      // Base Score
       score += general.mindset + general.health + general.experience + general.luck + general.romance + general.efficiency * 5;
       score += unlockedAchievements.length * 50;
 
-      // Determine Rank & Title
       if (state.phase === Phase.WITHDRAWAL) {
           rank = "F";
           title = "遗憾离场";
           comment = "虽然这次不得不停下脚步，但健康永远是第一位的。养好身体，未来还有无限可能。";
       } else {
-          // Normal Ending Logic
           if (competition === 'OI') {
              const noip = competitionResults.find(r => r.title.includes('NOIP'));
              if (noip && noip.award.includes('一等奖')) {
@@ -759,7 +826,6 @@ const App: React.FC = () => {
              }
           }
 
-          // Override if Academic God
           if (examResult?.rank && examResult.rank <= 3) {
               rank = "SSS";
               title = "全能卷王";
@@ -774,7 +840,6 @@ const App: React.FC = () => {
               }
           }
 
-          // Special Titles
           if (general.romance > 90 && state.romancePartner) {
               title = "现充赢家";
               comment = `不仅成绩不错，还收获了与 ${state.romancePartner} 的甜蜜爱情，真是让人嫉妒啊。`;
@@ -793,7 +858,7 @@ const App: React.FC = () => {
 
   const endingData = (state.phase === Phase.ENDING || state.phase === Phase.WITHDRAWAL) ? getEndingAnalysis() : null;
 
-  // --- HOME VIEW (Redesigned) ---
+  // --- HOME VIEW ---
   if (view === 'HOME') {
       return (
           <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 md:p-10 font-sans relative overflow-hidden">
@@ -840,7 +905,7 @@ const App: React.FC = () => {
                  <div className="w-full max-w-2xl bg-white p-6 rounded-3xl shadow-lg border border-slate-100 z-10 mb-8 animate-fadeIn">
                      <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2"><i className="fas fa-pen"></i> 配置初始属性</h4>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         {(Object.keys(INITIAL_GENERAL) as (keyof GeneralStats)[]).map(key => (
+                         {(Object.keys(INITIAL_GENERAL_CONST) as (keyof GeneralStats)[]).map(key => (
                              <div key={key}>
                                  <label className="text-xs font-bold text-slate-400 uppercase flex justify-between mb-1">
                                      <span>{key}</span>
@@ -867,7 +932,7 @@ const App: React.FC = () => {
                     <button onClick={() => setShowChangelog(true)} className="bg-white text-slate-500 px-6 py-4 rounded-2xl font-bold text-lg shadow-lg hover:bg-slate-50 transition-all flex items-center gap-2">
                         <i className="fas fa-history"></i> <span className="hidden md:inline">更新日志</span>
                     </button>
-                    <button onClick={startGame} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-4 rounded-2xl font-black text-xl shadow-xl transition-all hover:scale-105 flex items-center gap-3">
+                    <button onClick={prepareGame} className="bg-indigo-600 hover:bg-indigo-700 text-white px-10 py-4 rounded-2xl font-black text-xl shadow-xl transition-all hover:scale-105 flex items-center gap-3">
                         <i className="fas fa-play"></i> 开启模拟
                     </button>
                 </div>
@@ -903,9 +968,66 @@ const App: React.FC = () => {
       );
   }
 
+  // --- TALENT SELECTION VIEW ---
+  if (view === 'TALENTS') {
+      return (
+          <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 md:p-10 font-sans relative">
+              <h2 className="text-3xl md:text-5xl font-black text-white mb-2 tracking-tight">天赋抉择</h2>
+              <div className="flex items-center gap-4 mb-8 bg-slate-800 px-6 py-3 rounded-full border border-slate-700">
+                  <span className="text-slate-400 font-bold">剩余点数</span>
+                  <span className={`text-2xl font-black ${talentPoints >= 0 ? 'text-emerald-400' : 'text-rose-500'}`}>{talentPoints}</span>
+                  <span className="text-xs text-slate-500 border-l border-slate-600 pl-4 ml-2">选择负面天赋以获取更多点数</span>
+              </div>
+              
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 max-w-6xl w-full mb-8 overflow-y-auto max-h-[60vh] p-2 custom-scroll">
+                  {availableTalents.map(talent => {
+                      const isSelected = selectedTalents.some(t => t.id === talent.id);
+                      return (
+                        <button 
+                            key={talent.id} 
+                            onClick={() => handleTalentToggle(talent)}
+                            className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-start gap-2 h-44 relative overflow-hidden group text-left ${isSelected ? 'bg-indigo-600 border-indigo-400 text-white shadow-lg transform scale-105 z-10' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}
+                        >
+                            <div className="flex justify-between w-full items-start">
+                                <span className={`text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded ${talent.rarity === 'cursed' ? 'bg-rose-900 text-rose-300' : 'bg-slate-700 text-slate-400'}`}>
+                                    {talent.rarity}
+                                </span>
+                                <span className={`text-xs font-black px-2 py-1 rounded-full ${talent.cost > 0 ? 'bg-slate-900 text-red-400' : 'bg-emerald-900 text-emerald-400'}`}>
+                                    {talent.cost > 0 ? `-${talent.cost}` : `+${Math.abs(talent.cost)}`}
+                                </span>
+                            </div>
+                            
+                            <h3 className="text-base md:text-lg font-bold mt-1 leading-tight">{talent.name}</h3>
+                            <p className={`text-xs leading-relaxed ${isSelected ? 'text-indigo-100' : 'text-slate-400'}`}>{talent.description}</p>
+                            
+                            {isSelected && (
+                                <div className="absolute bottom-2 right-2 w-5 h-5 bg-white text-indigo-600 rounded-full flex items-center justify-center shadow-sm">
+                                    <i className="fas fa-check text-[10px]"></i>
+                                </div>
+                            )}
+                        </button>
+                      );
+                  })}
+              </div>
+
+              <div className="flex gap-4 z-20 bg-slate-900/90 backdrop-blur p-4 rounded-2xl border border-slate-800">
+                  <button onClick={() => setView('HOME')} className="text-slate-500 font-bold hover:text-white transition-colors px-4">返回</button>
+                  <button 
+                    onClick={startGame} 
+                    disabled={talentPoints < 0}
+                    className="bg-white text-slate-900 px-8 py-3 rounded-xl font-black text-lg hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                      {talentPoints < 0 ? '点数不足' : '入学吧。'} 
+                      {talentPoints >= 0 && <i className="fas fa-arrow-right"></i>}
+                  </button>
+              </div>
+          </div>
+      )
+  }
+
   // --- GAME VIEW ---
   return (
-    <div className="h-screen bg-slate-100 flex flex-col md:flex-row p-2 md:p-4 gap-2 md:gap-4 overflow-hidden font-sans text-slate-900 relative">
+    <div className="h-[100dvh] bg-slate-100 flex flex-col md:flex-row p-2 md:p-4 gap-2 md:gap-4 overflow-hidden font-sans text-slate-900 relative">
       {/* Toast */}
       {state.achievementPopup && (
           <div className="absolute top-8 left-1/2 -translate-x-1/2 z-[60] bg-slate-800 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-fadeIn border border-slate-700">
@@ -921,10 +1043,13 @@ const App: React.FC = () => {
       <aside className="w-full md:w-80 flex-shrink-0 flex flex-col gap-2 md:gap-4 max-h-[30vh] md:max-h-full overflow-y-auto md:overflow-visible">
           <StatsPanel state={state} />
           <div className="hidden md:grid grid-cols-2 gap-2">
+            <button onClick={() => setShowShop(true)} className="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col items-center justify-center font-bold text-slate-600">
+                 <i className="fas fa-store text-emerald-500 mb-1"></i><span className="text-xs">小卖部</span>
+            </button>
             <button onClick={() => setShowHistory(true)} className="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col items-center justify-center font-bold text-slate-600">
               <i className="fas fa-archive text-indigo-500 mb-1"></i><span className="text-xs">历程</span>
             </button>
-            <button onClick={() => setShowAchievements(true)} className="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col items-center justify-center font-bold text-slate-600 relative">
+            <button onClick={() => setShowAchievements(true)} className="col-span-2 bg-white border border-slate-200 p-3 rounded-2xl shadow-sm hover:shadow-md transition-all flex flex-col items-center justify-center font-bold text-slate-600 relative">
                  <i className="fas fa-trophy text-yellow-500 mb-1"></i><span className="text-xs">成就</span>
                  <span className="absolute top-2 right-2 bg-slate-100 text-[9px] px-1.5 rounded-full">{state.unlockedAchievements.length}</span>
             </button>
@@ -935,7 +1060,8 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="flex-1 flex flex-col gap-2 md:gap-4 relative h-full overflow-hidden">
         {/* Mobile-only Controls Toolbar */}
-        <div className="flex md:hidden gap-2 overflow-x-auto pb-1">
+        <div className="flex md:hidden gap-2 overflow-x-auto pb-1 flex-shrink-0">
+             <button onClick={() => setShowShop(true)} className="flex-shrink-0 bg-white border px-3 py-2 rounded-xl text-xs font-bold shadow-sm"><i className="fas fa-store text-emerald-500 mr-1"></i>小卖部</button>
              <button onClick={() => setShowAchievements(true)} className="flex-shrink-0 bg-white border px-3 py-2 rounded-xl text-xs font-bold shadow-sm"><i className="fas fa-trophy text-yellow-500 mr-1"></i>成就</button>
              <button onClick={() => setShowHistory(true)} className="flex-shrink-0 bg-white border px-3 py-2 rounded-xl text-xs font-bold shadow-sm"><i className="fas fa-archive text-indigo-500 mr-1"></i>历程</button>
              <button onClick={endGame} className="flex-shrink-0 bg-rose-50 border border-rose-100 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 shadow-sm">结束</button>
@@ -961,6 +1087,16 @@ const App: React.FC = () => {
                                     </div>
                                 </div>
                             )) : <span className="text-[10px] text-slate-300 font-medium italic">无特殊状态</span>}
+                            {/* Talents in Header */}
+                            {state.talents.map(t => (
+                                <div key={t.id} className="group relative flex items-center gap-1.5 px-2 py-0.5 rounded border text-[10px] font-bold shadow-sm cursor-help bg-purple-50 border-purple-200 text-purple-700">
+                                     <i className="fas fa-star"></i> {t.name}
+                                     <div className="absolute top-full left-0 mt-1 w-48 p-3 bg-slate-800 text-white rounded-xl shadow-2xl z-[60] hidden group-hover:block text-xs font-normal pointer-events-none">
+                                        <div className="font-bold mb-1 text-amber-300">{t.name}</div>
+                                        <div className="mb-2 leading-tight">{t.description}</div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                    </div>
                    
@@ -1003,7 +1139,12 @@ const App: React.FC = () => {
                   </div>
                   <p className="text-slate-500 mb-6">难得的周末，你想怎么度过？</p>
                   <div className="space-y-3">
-                     {WEEKEND_ACTIVITIES.map(activity => {
+                     {[...WEEKEND_ACTIVITIES].sort((a, b) => {
+                         // Sort LOVE and OI to top
+                         const aPriority = (a.type === 'LOVE' || a.type === 'OI') ? 1 : 0;
+                         const bPriority = (b.type === 'LOVE' || b.type === 'OI') ? 1 : 0;
+                         return bPriority - aPriority;
+                     }).map(activity => {
                          if (activity.condition && !activity.condition(state)) return null;
                          return (
                              <button key={activity.id} onClick={() => handleWeekendActivityClick(activity)}
@@ -1085,6 +1226,43 @@ const App: React.FC = () => {
              </div>
         )}
 
+        {/* Shop Modal */}
+        {showShop && (
+             <div className="absolute inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowShop(false)}>
+                 <div className="bg-white rounded-3xl p-6 md:p-8 max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                     <div className="flex justify-between items-center mb-6">
+                         <div>
+                            <h2 className="text-2xl font-black text-slate-800">八中小卖部</h2>
+                            <p className="text-sm text-slate-500">持有金钱: <span className="text-yellow-600 font-bold">{state.general.money}</span></p>
+                         </div>
+                         <button onClick={() => setShowShop(false)} className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center"><i className="fas fa-times"></i></button>
+                     </div>
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 overflow-y-auto custom-scroll p-1">
+                         {SHOP_ITEMS.map(item => (
+                             <button 
+                                key={item.id} 
+                                onClick={() => handleShopPurchase(item)}
+                                disabled={state.general.money < item.price}
+                                className="p-4 rounded-xl border border-slate-100 hover:border-indigo-500 hover:bg-indigo-50 transition-all text-left flex items-center gap-4 group disabled:opacity-50 disabled:cursor-not-allowed"
+                             >
+                                 <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:text-indigo-600 transition-colors">
+                                     <i className={`fas ${item.icon} text-xl`}></i>
+                                 </div>
+                                 <div className="flex-1">
+                                     <div className="flex justify-between items-center">
+                                         <span className="font-bold text-slate-800">{item.name}</span>
+                                         <span className="text-sm font-bold text-yellow-600">{item.price} G</span>
+                                     </div>
+                                     <p className="text-xs text-slate-400 mt-1">{item.description}</p>
+                                 </div>
+                             </button>
+                         ))}
+                     </div>
+                 </div>
+             </div>
+        )}
+
         {/* Event Modal Overlay */}
         {state.currentEvent && (
             <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 z-20 animate-fadeIn">
@@ -1159,7 +1337,7 @@ const App: React.FC = () => {
         {/* Final Settlement Overlay - IMPROVED UI */}
         {(state.phase === Phase.ENDING || state.phase === Phase.WITHDRAWAL) && endingData && (
             <div className="absolute inset-0 z-50 bg-slate-900/95 backdrop-blur-md text-slate-800 flex flex-col items-center justify-center p-4 md:p-6 animate-fadeIn overflow-y-auto">
-                <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl flex flex-col md:flex-row overflow-hidden border-4 border-slate-800 relative">
+                <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl flex flex-col md:flex-row overflow-hidden border-4 border-slate-800 relative shrink-0">
                     
                     {/* Rank Stamp */}
                     <div className="absolute top-0 right-0 z-20 pointer-events-none transform translate-x-1/4 -translate-y-1/4 md:translate-x-0 md:-translate-y-0 md:top-6 md:right-6">
@@ -1214,6 +1392,18 @@ const App: React.FC = () => {
 
                     {/* Right Column: Highlights & Achievements */}
                     <div className="flex-1 p-8 flex flex-col bg-white">
+                        {state.talents.length > 0 && (
+                            <div className="mb-6">
+                                <h3 className="font-black text-slate-400 uppercase text-xs mb-3">天赋</h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {state.talents.map(t => (
+                                        <div key={t.id} className="px-2 py-1 bg-slate-100 rounded text-xs font-bold text-slate-600 border border-slate-200">
+                                            {t.name}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         <div className="flex-1">
                             <h3 className="font-black text-slate-400 uppercase text-xs mb-4">学期高光时刻</h3>
                             <div className="space-y-4 relative">
@@ -1244,8 +1434,8 @@ const App: React.FC = () => {
                              </div>
                              
                              <div className="flex gap-3">
-                                 <button onClick={() => setView('HOME')} className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-slate-800 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1">
-                                     <i className="fas fa-redo-alt mr-2"></i> 再来一年
+                                 <button onClick={() => setView('HOME')} className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-slate-800 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 flex items-center justify-center gap-2">
+                                     <i className="fas fa-redo-alt"></i> 再来一年
                                  </button>
                                  <button onClick={() => setShowHistory(true)} className="px-6 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-colors">
                                      <i className="fas fa-history"></i>
