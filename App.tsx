@@ -163,6 +163,10 @@ const App: React.FC = () => {
 
 
   const startGame = () => {
+    // FIX: Reset UI states that might persist from previous session
+    setWeekendResult(null);
+    setShowClubSelection(false);
+
     const rolledSubjects = { ...INITIAL_SUBJECTS };
     (Object.keys(rolledSubjects) as SubjectKey[]).forEach(k => {
       rolledSubjects[k] = {
@@ -195,22 +199,33 @@ const App: React.FC = () => {
 
     const firstEvent = PHASE_EVENTS[Phase.SUMMER].find(e => e.id === 'sum_goal_selection');
     
+    // CRITICAL FIX: Reset ALL state variables using INITIAL_GAME_STATE
+    // We only preserve unlockedAchievements from previous state
     setState(prev => ({
-      ...prev,
+      ...INITIAL_GAME_STATE, // Reset base structure
+      unlockedAchievements: prev.unlockedAchievements, // Persist achievements
+      
+      // New Game Setup
       phase: Phase.SUMMER,
       week: 1,
       totalWeeksInPhase: 5,
       subjects: rolledSubjects,
+      general: initialGeneral,
+      activeStatuses: initialStatuses,
+      oiStats: INITIAL_OI_STATS,
+      
       currentEvent: firstEvent || null,
       triggeredEvents: firstEvent ? [firstEvent.id] : [],
       log: [{ message: "北京八中模拟器启动。", type: 'success', timestamp: Date.now() }],
-      activeStatuses: initialStatuses,
+      
       className: '待分班',
+      club: null,
+      romancePartner: null, // Explicitly ensure this is null
+      competition: 'None',
+      
+      difficulty: selectedDifficulty,
       isPlaying: false,
       eventQueue: [],
-      general: initialGeneral,
-      oiStats: INITIAL_OI_STATS,
-      difficulty: selectedDifficulty,
       weekendProcessed: false,
       sleepCount: 0
     }));
@@ -220,6 +235,7 @@ const App: React.FC = () => {
   };
 
   const endGame = () => {
+      setWeekendResult(null); // Clear any pending weekend actions
       setState(prev => ({ ...prev, phase: Phase.WITHDRAWAL, isPlaying: false, currentEvent: null }));
   };
 
@@ -733,7 +749,7 @@ const App: React.FC = () => {
              if (noip && noip.award.includes('一等奖')) {
                  rank = "SSS";
                  title = "OI大神";
-                 comment = "你在信息学竞赛中展现了惊人的天赋，清北的校门正向你敞开！";
+                 comment = "你在信息学竞赛中展现了惊人的天赋！";
                  score += 1000;
              } else if (noip && noip.award.includes('二等奖')) {
                  rank = "A";
