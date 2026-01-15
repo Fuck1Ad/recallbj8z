@@ -164,7 +164,7 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                  </div>
 
                  {/* 4. Utils Grid (Bottom Right - Meta Links) */}
-                 <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+                 <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-5 gap-4">
                      <button onClick={() => setShowChangelog(true)} className="bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-md border border-slate-100 dark:border-slate-700 hover:shadow-lg hover:border-indigo-100 transition-all flex flex-col items-center justify-center gap-2 group h-full">
                          <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors"><i className="fas fa-history"></i></div>
                          <span className="font-bold text-slate-600 dark:text-slate-300 text-sm">更新日志</span>
@@ -175,8 +175,12 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                      </button>
                      <button onClick={() => setShowSettings(true)} className="bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-md border border-slate-100 dark:border-slate-700 hover:shadow-lg hover:border-blue-100 transition-all flex flex-col items-center justify-center gap-2 group h-full">
                          <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors"><i className="fas fa-cog"></i></div>
-                         <span className="font-bold text-slate-600 dark:text-slate-300 text-sm">设置/关于</span>
+                         <span className="font-bold text-slate-600 dark:text-slate-300 text-sm">设置</span>
                      </button>
+                     <a href="https://v.wjx.cn/vm/exSyEK0.aspx" target="_blank" rel="noopener noreferrer" className="bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-md border border-slate-100 dark:border-slate-700 hover:shadow-lg hover:border-emerald-100 transition-all flex flex-col items-center justify-center gap-2 group h-full">
+                         <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-emerald-100 group-hover:text-emerald-600 transition-colors"><i className="fas fa-poll-h"></i></div>
+                         <span className="font-bold text-slate-600 dark:text-slate-300 text-sm">反馈问卷</span>
+                     </a>
                      <a href="https://github.com/liuenyin/recallbj8z" target="_blank" rel="noopener noreferrer" className="bg-slate-900 dark:bg-black p-4 rounded-3xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all flex flex-col items-center justify-center gap-2 group h-full text-white">
                          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white"><i className="fab fa-github"></i></div>
                          <span className="font-bold text-sm">GitHub</span>
@@ -287,6 +291,7 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                              <div className="space-y-4">
                                  <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs border-b border-slate-100 dark:border-slate-700 pb-2">FAQ</h3>
                                  <div className="text-sm text-slate-600 dark:text-slate-300 space-y-2">
+                                     <p><span className="font-bold text-slate-800 dark:text-slate-200">Q: 我有建议/Bug反馈怎么办？</span><br/>A: 欢迎填写 <a href="https://v.wjx.cn/vm/exSyEK0.aspx" target="_blank" className="text-indigo-600 dark:text-indigo-400 hover:underline">反馈问卷</a>，我会认真阅读每一条反馈。</p>
                                      <p><span className="font-bold text-slate-800 dark:text-slate-200">Q: 你真的会看我们的反馈吗？</span><br/>A: 真的真的！没法逐一回复是因为1）有点忙2）迫于问卷星的特性。我真的会看你们的反馈的！</p>
                                      <p><span className="font-bold text-slate-800 dark:text-slate-200">Q: 怎么存档？</span><br/>A: 目前支持本地单档存储。点击主页或游戏侧边栏的保存按钮即可。游戏在关键节点不会自动保存，请手动保存。</p>
                                      <p><span className="font-bold text-slate-800 dark:text-slate-200">Q: 为什么有些成就无法解锁？</span><br/>A: 所有成就仅在【现实】难度下开放解锁。</p>
