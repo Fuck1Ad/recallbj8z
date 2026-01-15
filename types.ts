@@ -81,7 +81,7 @@ export interface GameStatus {
   effectDescription?: string; // e.g. "学习效率 +20%"
 }
 
-export type ClubId = 'rap' | 'dance' | 'social_science' | 'mun' | 'touhou' | 'astronomy' | 'math_research' | 'ttrpg' | 'literature' | 'otaku' | 'anime' | 'volleyball' | 'vocaloid' | 'poetry' | 'none';
+export type ClubId = 'rap' | 'dance' | 'social_science' | 'mun' | 'touhou' | 'astronomy' | 'math_research' | 'ttrpg' | 'literature' | 'otaku' | 'anime' | 'volleyball' | 'vocaloid' | 'poetry' | 'human_behavior' | 'none';
 
 export interface Club {
     id: ClubId;
@@ -122,6 +122,8 @@ export interface Item {
     icon: string;
     effect: (state: GameState) => Partial<GameState>;
 }
+
+export type Theme = 'light' | 'dark';
 
 // ------------------------------
 
@@ -171,10 +173,14 @@ export interface GameState {
   
   // Stats for Achievements
   sleepCount: number;
+  rejectionCount: number; // Added: Count of "Nice Person Cards"
 
   // New Feature States
   talents: Talent[];
   inventory: string[]; // List of Item IDs
+  
+  // Settings
+  theme: Theme;
 }
 
 export interface GameLogEntry {

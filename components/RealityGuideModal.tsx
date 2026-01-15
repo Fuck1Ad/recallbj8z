@@ -145,7 +145,7 @@ const RealityGuideModal: React.FC<RealityGuideModalProps> = ({ onClose }) => {
 
                             <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 text-amber-800 text-xs">
                                 <span className="font-bold block mb-1"><i className="fas fa-lightbulb"></i> 提示：</span>
-                                想要拿第一名，你的总分通常需要接近满分（&ge; 98%）。即使是微小的失误也会让你掉出前十名，这就是八中的残酷。
+                                想要拿第一名，你的总分通常需要接近满分（&ge; 98%）。
                             </div>
                         </div>
                     )}

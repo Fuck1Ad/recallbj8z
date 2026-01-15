@@ -70,8 +70,8 @@ const ExamView: React.FC<ExamViewProps> = ({ title, state, onFinish }) => {
              // Misc base capability from general intelligence/math
              ability += state.subjects.math.aptitude * 0.1; 
              
-             // Difficulty scaling
-             const difficultyFactor = (required * 5); // Rough scaling
+             // Difficulty scaling - INCREASED DIFFICULTY MULTIPLIER to nerf easy wins
+             const difficultyFactor = (required * 7.5); 
              
              // Score Calc
              let ratio = ability / Math.max(1, difficultyFactor);
@@ -82,8 +82,8 @@ const ExamView: React.FC<ExamViewProps> = ({ title, state, onFinish }) => {
 
              // Difficulty Mode Modifier
              let modeMod = 0.7;
-             if (state.difficulty === 'NORMAL') modeMod = 1.0; // Easy to get points
-             if (state.difficulty === 'REALITY') modeMod = 0.45; // Hard
+             if (state.difficulty === 'NORMAL') modeMod = 1.0; 
+             if (state.difficulty === 'REALITY') modeMod = 0.5; // Slightly harder nerf for reality
 
              const finalRatio = (ratio + luckFactor + mindsetFactor) * modeMod;
              

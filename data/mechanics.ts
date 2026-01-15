@@ -93,6 +93,7 @@ export const ACHIEVEMENTS: Record<string, Achievement> = {
     'top_rank': { id: 'top_rank', title: '一览众山小', description: '年级第一！（真的能实现！LA群里有人成功了！）', icon: 'fa-crown', rarity: 'legendary' },
     'bottom_rank': { id: 'bottom_rank', title: '旷世奇才', description: '倒数第一，也是神人。', icon: 'fa-poop', rarity: 'rare' },
     'sleep_god': { id: 'sleep_god', title: '睡神', description: '天天睡觉还考这么高，羡慕了。', icon: 'fa-bed', rarity: 'legendary' },
+    'nice_person': { id: 'nice_person', title: '大好人', description: '对不起，但你人真的挺好（累计收到5次好人卡）。', icon: 'fa-heart-broken', rarity: 'rare' },
 };
 
 // --- Statuses ---
@@ -101,6 +102,7 @@ export const STATUSES: Record<string, Omit<GameStatus, 'duration'>> = {
     'anxious': { id: 'anxious', name: '焦虑', description: '对未来的担忧让你无法平静。', type: 'DEBUFF', icon: 'fa-cloud-rain', effectDescription: '每回合心态 -2' },
     'crush': { id: 'crush', name: '暗恋', description: '那个人的身影总是在脑海挥之不去。', type: 'NEUTRAL', icon: 'fa-heart', effectDescription: '效率 -2，魅力 +2' },
     'in_love': { id: 'in_love', name: '恋爱', description: '甜，太甜了。', type: 'BUFF', icon: 'fa-heartbeat', effectDescription: '每周心态 +5' },
+    'heartbroken': { id: 'heartbroken', name: '失恋', description: '心如刀绞，这就是青春的代价吗？', type: 'DEBUFF', icon: 'fa-heart-broken', effectDescription: '每周心态 -3, 效率 -1' },
     'exhausted': { id: 'exhausted', name: '透支', description: '你需要休息。', type: 'DEBUFF', icon: 'fa-bed', effectDescription: '健康无法自然恢复' },
     'debt': { id: 'debt', name: '负债', description: '身无分文甚至欠了外债，这让你非常焦虑。', type: 'DEBUFF', icon: 'fa-file-invoice-dollar', effectDescription: '每周心态 -5，魅力 -3' },
     'crush_pending': { id: 'crush_pending', name: '恋人未满', description: '虽然还没捅破窗户纸，但这种暧昧的感觉真好。', type: 'BUFF', icon: 'fa-comments', effectDescription: '每周运气 +2，经验 +2' }
@@ -163,6 +165,10 @@ export const CLUBS: Club[] = [
     {
         id: 'anime', name: '动漫社', icon: 'fa-tv', description: '一起补番，一起吐槽。', effectDescription: '心态++, 魅力+',
         action: (s) => ({ general: { ...s.general, mindset: s.general.mindset + 4, romance: s.general.romance + 1 } })
+    },
+    {
+        id: 'human_behavior', name: '人类行为研究社', icon: 'fa-user-secret', description: '拓宽人类行为的边界。', effectDescription: '心态+++, 健康++, 魅力-',
+        action: (s) => ({ general: { ...s.general, mindset: s.general.mindset + 5, health: s.general.health + 3, romance: s.general.romance - 2 } })
     }
 ];
 
@@ -177,7 +183,7 @@ export const WEEKEND_ACTIVITIES: WeekendActivity[] = [
     {
         id: 'w_library', name: '上图书馆', icon: 'fa-book', type: 'STUDY',
         description: '提升学习效率，巩固语数外基础。',
-        resultText: '八中图书馆的氛围很好，你感觉学习效率提升了(效率+1)。',
+        resultText: '图书馆的氛围很好，你感觉学习效率提升了(效率+1)。',
         action: (s) => ({ general: { ...s.general, efficiency: s.general.efficiency + 1 }, subjects: modifySub(s, ['chinese', 'english', 'math'], 0.5) })
     },
     {
@@ -194,13 +200,13 @@ export const WEEKEND_ACTIVITIES: WeekendActivity[] = [
     },
     {
         id: 'w_sleep', name: '补觉', icon: 'fa-bed', type: 'REST',
-        description: '恢复大量健康和少量心态。累计次数可解锁成就。',
+        description: 'S属性大爆发，Sleep!',
         resultText: '这一觉睡得天昏地暗，醒来时已经是黄昏了。',
         action: (s) => ({ general: { ...s.general, health: s.general.health + 8, mindset: s.general.mindset + 2 }, sleepCount: (s.sleepCount || 0) + 1 })
     },
     {
         id: 'w_game_late', name: '熬夜打游戏', icon: 'fa-moon', type: 'REST',
-        description: '大幅提升心态，但损害健康和效率。',
+        description: '爽爽爽！',
         resultText: '赢了一晚上，爽！但是第二天早上头痛欲裂。',
         action: (s) => ({ general: { ...s.general, mindset: s.general.mindset + 8, health: s.general.health - 5, efficiency: s.general.efficiency - 2 } })
     },
@@ -268,14 +274,14 @@ export const WEEKEND_ACTIVITIES: WeekendActivity[] = [
         id: 'w_cf', name: '打 Codeforces', icon: 'fa-laptop-code', type: 'OI',
         condition: (s) => s.competition === 'OI',
         description: '提升思维能力，但可能会掉Rating影响心态。',
-        resultText: '打了一场 Div.2，被C题卡住了。',
+        resultText: '打了一场 Div.2，被E题卡住了。',
         action: (s) => ({ oiStats: modifyOI(s, { math: 0.5, misc: 0.5 }), general: { ...s.general, mindset: s.general.mindset - 4 } })
     },
     {
         id: 'w_atc', name: '打 AtCoder', icon: 'fa-keyboard', type: 'OI',
         condition: (s) => s.competition === 'OI',
         description: '提升数学和思维能力。',
-        resultText: 'AtCoder 的题目比较清新。',
+        resultText: '小清新ARC。',
         action: (s) => ({ oiStats: modifyOI(s, { math: 0.8, misc: 0.2 }), general: { ...s.general, mindset: s.general.mindset - 2 } })
     },
     {

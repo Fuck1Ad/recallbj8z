@@ -76,8 +76,10 @@ const getInitialGameState = (): GameState => ({
     weekendActionPoints: 0,
     weekendProcessed: false,
     sleepCount: 0,
+    rejectionCount: 0,
     talents: [],
-    inventory: []
+    inventory: [],
+    theme: 'light'
 });
 
 export const useGameLogic = () => {
@@ -160,6 +162,7 @@ export const useGameLogic = () => {
             if (prev.general.money <= -250) unlockAchievement('in_debt');
             if (prev.general.health < 10 && prev.phase === Phase.SEMESTER_1) unlockAchievement('survival');
             if (prev.general.romance >= 250) unlockAchievement('romance_master');
+            if (prev.rejectionCount >= 5) unlockAchievement('nice_person');
 
             let nextPhase = prev.phase;
             let nextWeek = prev.week + 1;

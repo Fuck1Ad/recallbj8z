@@ -1,408 +1,11 @@
 
-import { GameState, GameEvent, SubjectKey, SUBJECT_NAMES, Phase } from '../types';
+import { GameState, GameEvent, Phase } from '../types';
 import { modifySub, modifyOI } from './utils';
-import { STATUSES } from './mechanics'; 
-// Note: CHAINED_EVENTS needs to be defined here because it contains GameEvents, 
-// but mechanic functions might need reference. 
-// Actually, looking at mechanics.ts, it doesn't export CHAINED_EVENTS. 
-// I will define CHAINED_EVENTS here as it is event logic.
+import { STATUSES } from './mechanics';
+import { BASE_EVENTS, CHAINED_EVENTS } from './event_defs';
 
-// --- Helper to Generate Dynamic Events ---
-
-export const generateStudyEvent = (state: GameState): GameEvent => {
-    // Pick a random subject from selected or main subjects.
-    // If no subjects selected yet (early game), allow potential for any subject or just mains.
-    // To fix "some classes cannot be attended", we ensure the pool covers relevant ground.
-    const pool: SubjectKey[] = state.selectedSubjects.length > 0 
-        ? ['chinese', 'math', 'english', ...state.selectedSubjects]
-        : (Object.keys(SUBJECT_NAMES) as SubjectKey[]); // In early game, allow exposure to all
-
-    const subject = pool[Math.floor(Math.random() * pool.length)];
-    const subName = SUBJECT_NAMES[subject];
-
-    return {
-        id: `study_weekly_${Date.now()}`,
-        title: `${subName}课的抉择`,
-        description: `这节是${subName}课，老师讲的内容似乎有点催眠，或者...有点太难了？`,
-        type: 'neutral',
-        choices: [
-            { 
-                text: '认真听讲', 
-                action: (s) => ({ 
-                    subjects: modifySub(s, [subject], 2 + s.general.efficiency * 0.1),
-                    general: { ...s.general, mindset: s.general.mindset - 1 }
-                }) 
-            },
-            { 
-                text: '偷偷刷题', 
-                action: (s) => ({ 
-                    subjects: modifySub(s, [subject], 4 + s.general.efficiency * 0.1),
-                    general: { ...s.general, health: s.general.health - 2 }
-                }) 
-            },
-            { 
-                text: '补觉', 
-                action: (s) => ({ 
-                    general: { ...s.general, health: s.general.health + 5, mindset: s.general.mindset + 2, efficiency: s.general.efficiency + 1 },
-                    subjects: modifySub(s, [subject], -1), 
-                    sleepCount: (s.sleepCount || 0) + 1
-                }) 
-            }
-        ]
-    };
-};
-
-export const generateRandomFlavorEvent = (state: GameState): GameEvent => {
-    // --- Dynamic Date Event (If Partner Exists) ---
-    if (state.romancePartner && Math.random() < 0.25) { 
-        const dateLocations = ['西单', '北海公园', '电影院', '国家图书馆', '什刹海'];
-        const loc = dateLocations[Math.floor(Math.random() * dateLocations.length)];
-        return {
-            id: `evt_date_${Date.now()}`,
-            title: '甜蜜约会',
-            description: `周末到了，${state.romancePartner}约你去${loc}逛逛。`,
-            type: 'positive',
-            choices: [
-                { 
-                    text: '欣然前往', 
-                    action: (st) => ({ 
-                        general: { ...st.general, money: st.general.money - 30, romance: st.general.romance + 5, mindset: st.general.mindset + 10 },
-                        activeStatuses: [...st.activeStatuses, { ...STATUSES['in_love'], duration: 2 }]
-                    }) 
-                },
-                { 
-                    text: '我要学习', 
-                    action: (st) => ({ 
-                        general: { ...st.general, mindset: st.general.mindset - 5, romance: st.general.romance - 5 } 
-                    }) 
-                }
-            ]
-        };
-    }
-
-    const events: ((s: GameState) => GameEvent)[] = [
-        (s) => ({
-            id: 'evt_rain',
-            title: '突如其来的雨',
-            description: '放学时，天空突然下起了倾盆大雨。',
-            type: 'neutral',
-            choices: [
-                ...(s.romancePartner ? [{
-                    text: `和${s.romancePartner}共撑一把伞`,
-                    action: (st: GameState) => ({
-                        general: { ...st.general, romance: st.general.romance + 5, mindset: st.general.mindset + 10 },
-                        activeStatuses: [...st.activeStatuses, { ...STATUSES['in_love'], duration: 2 }]
-                    })
-                }] : []),
-                { text: '冒雨跑回去', action: (st) => ({ general: { ...st.general, health: st.general.health - 10, mindset: st.general.mindset - 5 } }) },
-                { text: '在便利店买把伞', action: (st) => ({ general: { ...st.general, money: st.general.money - 20 } }) }
-            ]
-        }),
-        (s) => ({
-            id: 'evt_homework',
-            title: '作业如山',
-            description: '今天的作业量异常的大，各科老师仿佛商量好了一样。',
-            type: 'negative',
-            choices: [
-                { text: '熬夜写完', action: (st) => ({ general: { ...st.general, health: st.general.health - 15, efficiency: st.general.efficiency - 2 }, subjects: modifySub(st, ['math', 'english'], 3) }) },
-                { text: '抄作业', action: (st) => ({ general: { ...st.general, experience: st.general.experience + 5, luck: st.general.luck - 5 } }) }
-            ]
-        }),
-        (s) => ({
-            id: 'evt_snow',
-            title: '瑞雪兆丰年',
-            description: '北京下雪了，操场上一片白茫茫。',
-            type: 'positive',
-            choices: [
-                 ...(s.romancePartner ? [{
-                    text: `和${s.romancePartner}在雪中漫步`,
-                    action: (st: GameState) => ({
-                        general: { ...st.general, romance: st.general.romance + 10, mindset: st.general.mindset + 15 },
-                        activeStatuses: [...st.activeStatuses, { ...STATUSES['in_love'], duration: 3 }]
-                    })
-                }] : []),
-                { text: '打雪仗！', action: (st) => ({ general: { ...st.general, health: st.general.health + 5, mindset: st.general.mindset + 10 } }) },
-                { text: '太冷了，回班', action: (st) => ({ general: { ...st.general, health: st.general.health - 2 } }) }
-            ]
-        }),
-        (s) => ({
-            id: 'evt_break_time',
-            title: '难得的休息',
-            description: '有一节自习课，老师还没来。你打算怎么打发时间？',
-            type: 'neutral',
-            choices: [
-                { 
-                    text: '刷B站', 
-                    action: (st) => ({ 
-                        general: { ...st.general, mindset: st.general.mindset + 5, efficiency: st.general.efficiency - 1 } 
-                    }) 
-                },
-                { 
-                    text: '趴着休息', 
-                    action: (st) => ({ 
-                        general: { ...st.general, health: st.general.health + 3 }, 
-                        sleepCount: (st.sleepCount || 0) + 1 
-                    }) 
-                },
-                { 
-                    text: '和周围同学聊天', 
-                    action: (st) => ({ 
-                        general: { ...st.general, romance: st.general.romance + 3, experience: st.general.experience + 2 } 
-                    }) 
-                }
-            ]
-        }),
-        (s) => ({
-            id: 'evt_dinner',
-            title: '周末聚餐',
-            description: '几个要好的同学提议周末去西单大悦城聚餐。',
-            type: 'positive',
-            choices: [
-                { 
-                    text: 'AA制走起 (-30金钱)', 
-                    action: (st) => ({ 
-                        general: { ...st.general, money: st.general.money - 30, mindset: st.general.mindset + 10, romance: st.general.romance + 5 } 
-                    }) 
-                },
-                { 
-                    text: '囊中羞涩，不去了', 
-                    action: (st) => ({ 
-                        general: { ...st.general, mindset: st.general.mindset - 2 } 
-                    }) 
-                }
-            ]
-        }),
-        // --- NEW MONEY EVENTS ---
-        (s) => ({
-            id: 'evt_homework_service',
-            title: '代写作业',
-            description: '隔壁班的同学想花钱找人代写数学作业。',
-            type: 'neutral',
-            choices: [
-                {
-                    text: '接单 (+20金钱)',
-                    action: (st) => {
-                  
-                         const caught = Math.random() < 0.4;
-                         if (caught) {
-                             return {
-                                 general: { ...st.general, mindset: st.general.mindset - 10, efficiency: st.general.efficiency - 2 },
-                                 log: [...st.log, { message: "惨！被老师发现了，钱没挣到还挨了顿骂。", type: 'error', timestamp: Date.now() }]
-                             }
-                         }
-                         return { general: { ...st.general, money: st.general.money + 20, efficiency: st.general.efficiency - 1 } }
-                    }
-                },
-                { text: '严词拒绝', action: (st) => ({ general: { ...st.general, mindset: st.general.mindset + 2 } }) }
-            ]
-        }),
-        (s) => ({
-            id: 'evt_help_card',
-            title: '忘带饭卡',
-            description: '排队打饭时，前面的同学发现忘带饭卡了，正尴尬地四处张望。',
-            type: 'neutral',
-            choices: [
-                {
-                    text: '帮TA刷一下',
-                    action: (st) => ({
-                        general: { ...st.general, money: st.general.money + 10, romance: st.general.romance + 1 },
-                        log: [...st.log, { message: "同学非常感激，转了你红包还多给了点。", type: 'success', timestamp: Date.now() }]
-                    })
-                },
-                { text: '假装没看见', action: (st) => ({ general: { ...st.general, experience: st.general.experience + 1 } }) }
-            ]
-        })
-    ];
-
-    // Card loss logic integrated into random selection probability
-    if (Math.random() < 0.05) {
-        return {
-            id: 'evt_lost_card',
-            title: '饭卡去哪了',
-            description: '中午去食堂打饭时，你摸遍了口袋也没找到饭卡。',
-            type: 'negative',
-            choices: [
-                { text: '借同学的刷', action: (st) => ({ general: { ...st.general, romance: st.general.romance + 2, money: st.general.money - 15 } }) },
-                { text: '补办一张', action: (st) => ({ general: { ...st.general, money: st.general.money - 50, mindset: st.general.mindset - 5 } }) }
-            ]
-        }
-    }
-    
-    // Lucky money drop (Rare)
-    if (state.general.luck > 60 && Math.random() < 0.05) {
-        return {
-            id: 'evt_pickup_money',
-            title: '意外之财',
-            description: '你在操场的草坪上发现了一张50元纸币，周围没有人。',
-            type: 'positive',
-            choices: [
-                {
-                    text: '捡起来 (+50金钱)',
-                    action: (st) => ({
-                        general: { ...st.general, money: st.general.money + 50, luck: st.general.luck - 5 },
-                        log: [...st.log, { message: "运气消耗了一点，但钱包鼓了。", type: 'success', timestamp: Date.now() }]
-                    })
-                }
-            ]
-        }
-    }
-
-    const picker = events[Math.floor(Math.random() * events.length)];
-    return { ...picker(state), id: `flavor_${Date.now()}` };
-};
-
-// --- Fixed Events ---
-
-export const SCIENCE_FESTIVAL_EVENT: GameEvent = {
-    id: 'evt_sci_fest',
-    title: '科技节',
-    description: '一年一度的科技节开始了，全校停课一天。操场上摆满了各个社团和班级的展台。',
-    type: 'positive',
-    triggerType: 'FIXED',
-    choices: [
-        { 
-            text: '参观展览', 
-            action: (s) => ({ 
-                general: { ...s.general, experience: s.general.experience + 10, mindset: s.general.mindset + 5 },
-                log: [...s.log, { message: "你参观了科技节展览，大开眼界。", type: 'success', timestamp: Date.now() }]
-            }) 
-        },
-        { 
-            text: '在教室自习', 
-            action: (s) => ({ 
-                subjects: modifySub(s, ['math', 'physics'], 3),
-                general: { ...s.general, mindset: s.general.mindset - 5 }
-            }) 
-        }
-    ]
-};
-
-export const NEW_YEAR_GALA_EVENT: GameEvent = {
-    id: 'evt_new_year',
-    title: '元旦联欢会',
-    description: '新年的钟声即将敲响，班级里正如火如荼地举办元旦联欢会。',
-    type: 'positive',
-    triggerType: 'FIXED',
-    choices: [
-        { 
-            text: '欣赏节目', 
-            nextEventId: 'evt_red_packet', // CHAIN TO RED PACKET
-            action: (s) => ({ 
-                general: { ...s.general, mindset: s.general.mindset + 15, romance: s.general.romance + 2 },
-                 log: [...s.log, { message: "你度过了一个愉快的下午。", type: 'success', timestamp: Date.now() }]
-            }) 
-        },
-        { 
-            text: '趁乱刷题', 
-            nextEventId: 'evt_red_packet', // CHAIN TO RED PACKET
-            action: (s) => ({ 
-                subjects: modifySub(s, ['english', 'chinese'], 3),
-                general: { ...s.general, mindset: s.general.mindset - 5, romance: s.general.romance - 5 }
-            }) 
-        }
-    ]
-};
-
-// --- Base Events (Reusable) ---
-
-export const BASE_EVENTS: Record<string, GameEvent> = {
-    'debt_collection': {
-        id: 'debt_collection',
-        title: '债主上门',
-        description: '因为你的负债过高，几个高大的学生拦住了你的去路...',
-        type: 'negative',
-        choices: [
-            { 
-                text: '还钱 (金钱归零)', 
-                action: (s) => ({ 
-                    general: { ...s.general, money: 0, mindset: s.general.mindset - 40, health: s.general.health - 20,romance: s.general.romance-=10 },
-                    log: [...s.log, { message: "你被迫还清了所有债务（虽然本来就是负的）。", type: 'warning', timestamp: Date.now() }]
-                }) 
-            },
-            { 
-                text: '逃跑', 
-                action: (s) => ({ 
-                    general: { ...s.general, health: s.general.health - 20, mindset: s.general.mindset - 10 },
-                    log: [...s.log, { message: "你没跑掉，被揍了一顿。", type: 'error', timestamp: Date.now() }]
-                }) 
-            }
-        ]
-    },
-    'exam_fail_talk': {
-        id: 'exam_fail_talk',
-        title: '考后谈话',
-        description: '因为考试成绩太差，班主任找你谈话。',
-        type: 'negative',
-        choices: [
-            { 
-                text: '虚心接受', 
-                action: (s) => ({ 
-                    general: { ...s.general, mindset: s.general.mindset + 5 } 
-                }) 
-            },
-            { 
-                text: '左耳进右耳出', 
-                action: (s) => ({ 
-                    general: { ...s.general, mindset: s.general.mindset - 2 } 
-                }) 
-            }
-        ]
-    }
-};
-
-export const CHAINED_EVENTS: Record<string, GameEvent> = {
-    'sum_confess_success': {
-        id: 'sum_confess_success',
-        title: '表白成功',
-        description: '对方竟然答应了！你们约定在高中互相鼓励，共同进步。',
-        type: 'positive',
-        choices: [{ text: '太棒了', action: (s) => ({ 
-            general: { ...s.general, mindset: s.general.mindset + 20, romance: s.general.romance + 20 }, 
-            romancePartner: 'TA',
-            activeStatuses: [...s.activeStatuses, { ...STATUSES['in_love'], duration: 10 }] 
-        }) }]
-    },
-    'sum_confess_fail': {
-        id: 'sum_confess_fail',
-        title: '被发好人卡',
-        description: '“你是个好人，但我现在只想好好学习。”',
-        type: 'negative',
-        choices: [{ text: '心碎满地', action: (s) => ({ general: { ...s.general, mindset: s.general.mindset - 20 } }) }]
-    },
-    'mil_star_performance': {
-        id: 'mil_star_performance',
-        title: '军训标兵',
-        description: '教官在全连队面前表扬了你。',
-        type: 'positive',
-        choices: [{ text: '倍感光荣', action: (s) => ({ general: { ...s.general, mindset: s.general.mindset + 10, experience: s.general.experience + 5 } }) }]
-    },
-    'evt_red_packet': {
-        id: 'evt_red_packet',
-        title: '新年红包',
-        description: '过年了，亲戚们最关心的果然还是期中考试的成绩...',
-        type: 'positive',
-        choices: [{
-            text: '收下红包',
-            action: (s) => {
-                let amount = 20;
-                let msg = "成绩平平，长辈勉励了几句。";
-                if (s.general.efficiency >= 25 || s.general.experience >= 60) {
-                    amount = 80;
-                    msg = "因为表现优异，在这个寒冬你收获颇丰！";
-                } else if (s.general.efficiency >= 15) {
-                    amount = 50;
-                    msg = "表现尚可，拿到了标准的压岁钱。";
-                }
-                return {
-                    general: { ...s.general, money: s.general.money + amount, mindset: s.general.mindset + 5 },
-                    log: [...s.log, { message: `【新年】${msg} 金钱+${amount}`, type: 'success', timestamp: Date.now() }]
-                };
-            }
-        }]
-    }
-};
-
-// --- Phase Events ---
+export * from './event_defs';
+export * from './event_generators';
 
 export const PHASE_EVENTS: Record<Phase, GameEvent[]> = {
     [Phase.INIT]: [],
@@ -410,7 +13,7 @@ export const PHASE_EVENTS: Record<Phase, GameEvent[]> = {
         {
             id: 'sum_goal_selection',
             title: '暑假的抉择',
-            description: '在正式开始高中生活前，你需要决定这五周的主攻方向。',
+            description: '在正式开始高中生活前，你需要决定这漫长八周的主攻方向。',
             type: 'neutral',
             once: true,
             triggerType: 'FIXED',
@@ -436,12 +39,12 @@ export const PHASE_EVENTS: Record<Phase, GameEvent[]> = {
         },
         {
             id: 'sum_city_walk',
-            title: '漫步京城',
-            description: '去学校周边转转，顺便买件衣服发个朋友圈。',
+            title: '出去走走吧！',
+            description: '去学校周边转转，顺便干点啥？',
             type: 'positive',
             choices: [
                 { 
-                    text: '拍照打卡 (-2金钱)', 
+                    text: '花几块钱买点吃的？', 
                     action: (s) => ({ 
                         general: { ...s.general, money: s.general.money - 2, experience: s.general.experience + 2, romance: s.general.romance + 1 } 
                     }) 
@@ -470,10 +73,10 @@ export const PHASE_EVENTS: Record<Phase, GameEvent[]> = {
         {
             id: 'sum_preview',
             title: '预习衔接课程',
-            description: '你翻开了崭新的高中教材。看着厚厚的《必修一》，你决定...',
+            description: '你翻开了崭新的高中教材。看着《必修一》，你决定...',
             type: 'neutral',
             choices: [
-                { text: '报名衔接班 (-5金钱)', action: (s) => ({ subjects: modifySub(s, ['math', 'physics', 'chemistry', 'english'], 2), general: { ...s.general, money: s.general.money - 5, experience: s.general.experience + 4, mindset: s.general.mindset - 1 } }) },
+                { text: '报名衔接班', action: (s) => ({ subjects: modifySub(s, ['math', 'physics', 'chemistry', 'english'], 2), general: { ...s.general, money: s.general.money - 5, experience: s.general.experience + 4, mindset: s.general.mindset - 1 } }) },
                 { text: '在家自学', action: (s) => {
                      if (s.general.efficiency > 11) {
                          return { subjects: modifySub(s, ['math', 'physics'], 2), general: { ...s.general, experience: s.general.experience + 3, mindset: s.general.mindset + 2 } };
@@ -490,7 +93,7 @@ export const PHASE_EVENTS: Record<Phase, GameEvent[]> = {
         {
             id: 'sum_math_bridge',
             title: '暑期数学衔接班',
-            description: '老师正在讲授高一函数的预备知识，这对于高中数学至关重要。',
+            description: 'woc，我咋不知道我还要上数学课？',
             type: 'neutral',
             choices: [
                 { text: '全神贯注', action: (s) => ({ subjects: modifySub(s, ['math'], 8), general: { ...s.general, mindset: s.general.mindset - 3 } }) },
@@ -499,8 +102,8 @@ export const PHASE_EVENTS: Record<Phase, GameEvent[]> = {
         },
         {
             id: 'sum_english_camp',
-            title: '英语集训',
-            description: '为了适应高中的词汇量，你参加了为期一周的英语集训。',
+            title: '预习英语',
+            description: '【报错】description不可为空',
             type: 'neutral',
             choices: [
                 { text: '狂背单词', action: (s) => ({ subjects: modifySub(s, ['english'], 8), general: { ...s.general, health: s.general.health - 2 } }) },
@@ -740,7 +343,7 @@ export const PHASE_EVENTS: Record<Phase, GameEvent[]> = {
             id: 'evt_oi_anxiety',
             title: '精神内耗',
             description: '长期的高压生活，你总会陷入焦虑。一次次的挫折后，你开始怀疑自己是否真的适合 OI。',
-            condition: (s) => s.competition === 'OI' && s.general.mindset < 70,
+            condition: (s) => s.competition === 'OI' && s.general.mindset < 80,
             type: 'negative',
             triggerType: 'RANDOM',
             choices: [
