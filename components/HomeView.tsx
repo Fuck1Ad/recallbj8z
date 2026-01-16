@@ -166,14 +166,17 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                              <UtilityButton icon="fa-cog" label="关于" onClick={() => setShowSettings(true)} color="text-slate-600 bg-slate-50 hover:bg-slate-100" />
                         </div>
 
-                        <div className="flex gap-3 w-full md:w-auto">
-                            <button onClick={() => setShowQQGroup(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-50 text-blue-600 font-bold hover:bg-blue-100 transition-colors text-sm" title="群号: 1080382240">
+                        <div className="grid grid-cols-2 md:flex gap-3 w-full md:w-auto">
+                            <button onClick={() => setShowQQGroup(true)} className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-50 text-blue-600 font-bold hover:bg-blue-100 transition-colors text-sm" title="群号: 1080382240">
                                 <i className="fab fa-qq"></i> 玩家群
                             </button>
-                            <a href="https://v.wjx.cn/vm/exSyEK0.aspx" target="_blank" rel="noopener noreferrer" className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-emerald-50 text-emerald-700 font-bold hover:bg-emerald-100 transition-colors text-sm">
+                             <a href="https://www.zhihu.com/question/1995560005978563512" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-sky-50 text-sky-600 font-bold hover:bg-sky-100 transition-colors text-sm">
+                                <i className="fab fa-zhihu"></i> 知乎评价
+                            </a>
+                            <a href="https://v.wjx.cn/vm/exSyEK0.aspx" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-emerald-50 text-emerald-700 font-bold hover:bg-emerald-100 transition-colors text-sm">
                                 <i className="fas fa-poll-h"></i> 反馈
                             </a>
-                            <a href="https://github.com/liuenyin/recallbj8z" target="_blank" rel="noopener noreferrer" className="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-colors text-sm shadow-md">
+                            <a href="https://github.com/liuenyin/recallbj8z" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-colors text-sm shadow-md">
                                 <i className="fab fa-github"></i> GitHub
                             </a>
                         </div>
