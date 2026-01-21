@@ -64,15 +64,15 @@ export const SHOP_ITEMS: Item[] = [
       effect: (s) => ({ general: { ...s.general, efficiency: s.general.efficiency + 2, health: s.general.health - 1, money: s.general.money - 15 } }) },
     { id: 'coffee', name: '瑞幸生椰拿铁', description: '我咖啡怎么变了？心态+3，效率+1。', price: 20, icon: 'fa-coffee',
       effect: (s) => ({ general: { ...s.general, mindset: s.general.mindset + 3, efficiency: s.general.efficiency + 1, money: s.general.money - 20 } }) },
-    { id: 'five_three', name: '五年高考三年模拟', description: '请输入文本。全科水平+2，心态-3。', price: 45, icon: 'fa-book',
+    { id: 'five_three', name: '五年高考三年模拟', description: '请输入文本。全科水平+4，心态-8。', price: 45, icon: 'fa-book',
       effect: (s) => ({ 
-          subjects: modifySub(s, ['chinese', 'math', 'english', 'physics', 'chemistry', 'biology'], 2), 
-          general: { ...s.general, mindset: s.general.mindset - 3, money: s.general.money - 45 } 
+          subjects: modifySub(s, ['chinese', 'math', 'english', 'physics', 'chemistry', 'biology'], 4), 
+          general: { ...s.general, mindset: s.general.mindset - 8, money: s.general.money - 45 } 
       }) },
     { id: 'game_skin', name: '不要问为啥没有648，问就是放这里你买不了', description: '虽然不能变强，但心情变好了。心态+8。', price: 68, icon: 'fa-gamepad',
       effect: (s) => ({ general: { ...s.general, mindset: s.general.mindset + 8, money: s.general.money - 68 } }) },
-    { id: 'flowers', name: '鲜花', description: '送给心仪的人。魅力+5，若有对象则大幅提升关系。', price: 50, icon: 'fa-fan',
-      effect: (s) => ({ general: { ...s.general, romance: s.general.romance + 5, money: s.general.money - 50, mindset: s.general.mindset + (s.romancePartner ? 5 : 0) } }) },
+    { id: 'flowers', name: '鲜花', description: '送给心仪的人。魅力+8，若有对象则大幅提升关系。', price: 50, icon: 'fa-fan',
+      effect: (s) => ({ general: { ...s.general, romance: s.general.romance + 8, money: s.general.money - 50, mindset: s.general.mindset + (s.romancePartner ? 5 : 0) } }) },
     { id: 'algo_book', name: '算法导论', description: '厚得可以当枕头。OI能力全面+2。', price: 80, icon: 'fa-code',
       effect: (s) => ({ oiStats: modifyOI(s, { dp: 2, ds: 2, math: 2, graph: 2, string: 2, misc: 2 }), general: { ...s.general, money: s.general.money - 80 } }) },
     { id: 'luogu_book', name: '深入浅出程序设计竞赛', description: 'kkk亲签？', price: 56, icon: 'fa-code',
@@ -93,7 +93,7 @@ export const ACHIEVEMENTS: Record<string, Achievement> = {
     'top_rank': { id: 'top_rank', title: '一览众山小', description: '年级第一！（真的能实现！LA群里有人成功了！）', icon: 'fa-crown', rarity: 'legendary' },
     'bottom_rank': { id: 'bottom_rank', title: '旷世奇才', description: '倒数第一，也是神人。', icon: 'fa-poop', rarity: 'rare' },
     'sleep_god': { id: 'sleep_god', title: '睡神', description: '天天睡觉还考这么高，羡慕了。', icon: 'fa-bed', rarity: 'legendary' },
-    'nice_person': { id: 'nice_person', title: '大好人', description: '对不起，但你人真的挺好（累计收到5次好人卡）。', icon: 'fa-heart-broken', rarity: 'rare' },
+    'nice_person': { id: 'nice_person', title: '大好人', description: '对不起，但你人真的挺好（单局内收到5次好人卡）。', icon: 'fa-heart-broken', rarity: 'rare' },
 };
 
 // --- Statuses ---
@@ -105,7 +105,8 @@ export const STATUSES: Record<string, Omit<GameStatus, 'duration'>> = {
     'heartbroken': { id: 'heartbroken', name: '失恋', description: '心如刀绞，这就是青春的代价吗？', type: 'DEBUFF', icon: 'fa-heart-broken', effectDescription: '每周心态 -3, 效率 -1' },
     'exhausted': { id: 'exhausted', name: '透支', description: '你需要休息。', type: 'DEBUFF', icon: 'fa-bed', effectDescription: '健康无法自然恢复' },
     'debt': { id: 'debt', name: '负债', description: '身无分文甚至欠了外债，这让你非常焦虑。', type: 'DEBUFF', icon: 'fa-file-invoice-dollar', effectDescription: '每周心态 -5，魅力 -3' },
-    'crush_pending': { id: 'crush_pending', name: '恋人未满', description: '虽然还没捅破窗户纸，但这种暧昧的感觉真好。', type: 'BUFF', icon: 'fa-comments', effectDescription: '每周运气 +2，经验 +2' }
+    'crush_pending': { id: 'crush_pending', name: '恋人未满', description: '虽然还没捅破窗户纸，但这种暧昧的感觉真好。', type: 'BUFF', icon: 'fa-comments', effectDescription: '每周运气 +2，经验 +2' },
+    'sleep_compulsion': { id: 'sleep_compulsion', name: '让我睡觉！', description: '每周不睡觉就会死。', type: 'DEBUFF', icon: 'fa-dizzy', effectDescription: '每周必须进行一次睡觉事件' }
 };
 
 // --- Clubs ---
@@ -174,6 +175,16 @@ export const CLUBS: Club[] = [
 
 // --- Weekend Activities ---
 export const WEEKEND_ACTIVITIES: WeekendActivity[] = [
+    {
+        id: 'w_club_activity', name: '社团活动', icon: 'fa-users', type: 'SOCIAL',
+        condition: (s) => !!s.club && s.week % 4 === 0,
+        description: '参加社团组织的月度活动。',
+        resultText: '你参加了社团活动，大家玩得很开心。(根据社团不同提升属性)',
+        action: (s) => {
+             const club = CLUBS.find(c => c.id === s.club);
+             return club ? club.action(s) : {};
+        }
+    },
     {
         id: 'w_shop', name: '约朋友逛街', icon: 'fa-shopping-bag', type: 'SOCIAL',
         description: '消费30元，大幅提升心情和魅力。',

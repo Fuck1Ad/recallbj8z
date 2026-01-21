@@ -1,15 +1,18 @@
 
-import React from 'react';
-import { Difficulty, GeneralStats } from '../types';
+import React, { useEffect, useState } from 'react';
+import { Difficulty, GeneralStats, Challenge } from '../types';
 import { DIFFICULTY_PRESETS, CHANGELOG_DATA } from '../data/constants';
 import { ACHIEVEMENTS } from '../data/mechanics';
+import { WEEKLY_CHALLENGES as LOCAL_CHALLENGES } from '../data/challenges';
+import { supabase, getLeaderboard, LeaderboardEntry } from '../lib/supabase';
+import LeaderboardModal from './LeaderboardModal';
 
 interface HomeViewProps {
     selectedDifficulty: Difficulty;
     onDifficultyChange: (diff: Difficulty) => void;
     customStats: GeneralStats;
     onCustomStatsChange: (stats: GeneralStats) => void;
-    onStart: () => void;
+    onStart: (challenge?: Challenge) => void; 
     hasSave: boolean;
     onLoadGame: () => void;
     unlockedAchievements: string[];
@@ -21,6 +24,46 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
     const [showSettings, setShowSettings] = React.useState(false);
     const [showAchievements, setShowAchievements] = React.useState(false);
     const [showQQGroup, setShowQQGroup] = React.useState(false);
+    
+    // Leaderboard State
+    const [showLeaderboard, setShowLeaderboard] = React.useState(false);
+    const [leaderboardInitId, setLeaderboardInitId] = useState<string | null>(null);
+    const [topScores, setTopScores] = useState<LeaderboardEntry[]>([]);
+
+    // Challenges State
+    const [challenges, setChallenges] = useState<Challenge[]>(LOCAL_CHALLENGES);
+    const [loadingChallenges, setLoadingChallenges] = useState(true);
+
+    useEffect(() => {
+        const fetchChallengesAndScores = async () => {
+            setLoadingChallenges(true);
+            try {
+                // 1. Fetch Challenges
+                // In a real app we might fetch from DB, here we stick to local or simple DB check
+                // For now, we use the local list which contains the Sleep Challenge
+                setChallenges(LOCAL_CHALLENGES);
+
+                // 2. Fetch Top Scores for the first challenge (Sleep King)
+                if (LOCAL_CHALLENGES.length > 0) {
+                    const { data } = await getLeaderboard(LOCAL_CHALLENGES[0].id, 5);
+                    if (data) {
+                        // @ts-ignore
+                        setTopScores(data);
+                    }
+                }
+            } catch (e) {
+                console.error('Error fetching data', e);
+            } finally {
+                setLoadingChallenges(false);
+            }
+        };
+        fetchChallengesAndScores();
+    }, []);
+
+    const openLeaderboard = (id: string | null) => {
+        setLeaderboardInitId(id);
+        setShowLeaderboard(true);
+    };
 
     return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-4 md:p-8 flex items-center justify-center">
@@ -103,7 +146,7 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                          )}
 
                          <div className="flex gap-4">
-                             <button onClick={onStart} className="flex-1 md:w-auto bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all flex items-center justify-center gap-3 active:scale-95">
+                             <button onClick={() => onStart()} className="flex-1 md:w-auto bg-slate-900 text-white px-10 py-4 rounded-2xl font-black text-xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all flex items-center justify-center gap-3 active:scale-95">
                                  <i className="fas fa-play text-indigo-400"></i> 开启新学期
                              </button>
                              
@@ -122,45 +165,83 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                      </div>
                  </div>
 
-                 {/* 2. Weekly Challenge */}
+                 {/* 2. Weekly Challenge (DYNAMIC) */}
                  <div className="lg:col-span-4 bg-gradient-to-br from-indigo-600 to-violet-700 rounded-[2.5rem] p-8 shadow-xl shadow-indigo-200 text-white flex flex-col justify-between relative overflow-hidden group min-h-[300px]">
                      <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-2xl transform translate-x-1/2 -translate-y-1/2"></div>
                      
-                     <div>
+                     <div className="flex-1 flex flex-col z-10 relative">
                          <div className="flex items-center justify-between mb-6">
                              <h3 className="font-black text-indigo-200 uppercase tracking-widest text-xs">Weekly Challenge</h3>
-                             <span className="bg-white/20 px-2 py-1 rounded-lg text-[10px] font-bold backdrop-blur-sm border border-white/10">S0 赛季</span>
+                             <div className="flex gap-2 items-center">
+                                 <button 
+                                    onClick={() => openLeaderboard(challenges[0]?.id || null)}
+                                    className="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-3 py-1 rounded-lg text-[10px] font-bold border border-white/10 transition-colors flex items-center gap-1 active:scale-95"
+                                    title="查看本期榜单"
+                                 >
+                                     <i className="fas fa-list-ol"></i> 完整榜单
+                                 </button>
+                                 <span className="bg-white/20 px-2 py-1 rounded-lg text-[10px] font-bold backdrop-blur-sm border border-white/10">S1 赛季</span>
+                             </div>
                          </div>
-                         <h2 className="text-3xl font-black mb-2">敬请期待</h2>
-                         <p className="text-indigo-200 text-sm mb-8 opacity-80">每周不同规则，冲击全服最高分！</p>
                          
-                         <div className="space-y-3 bg-black/20 rounded-2xl p-4 backdrop-blur-md border border-white/10">
-                             <div className="flex justify-between text-xs font-bold items-center">
-                                 <div className="flex items-center gap-3"><span className="text-yellow-300 w-4">#1</span> <span>即将开放</span></div>
-                                 <span className="font-mono opacity-80">---</span>
+                         {loadingChallenges ? (
+                             <div className="flex-1 flex items-center justify-center">
+                                 <i className="fas fa-spinner fa-spin text-2xl opacity-50"></i>
                              </div>
-                             <div className="flex justify-between text-xs font-medium items-center opacity-60">
-                                 <div className="flex items-center gap-3"><span className="text-slate-300 w-4">#2</span> <span>虚位以待</span></div>
-                                 <span className="font-mono">---</span>
+                         ) : challenges.length > 0 ? (
+                             <>
+                                 <div className="mb-6">
+                                     <h2 className="text-2xl font-black mb-1 truncate">{challenges[0].title}</h2>
+                                     <p className="text-indigo-200 text-xs opacity-80 line-clamp-2">{challenges[0].description}</p>
+                                 </div>
+                                 
+                                 <div className="flex-1 bg-black/20 rounded-2xl p-4 backdrop-blur-md border border-white/10 overflow-hidden flex flex-col">
+                                     <div className="flex justify-between items-center mb-3 border-b border-white/10 pb-2">
+                                         <span className="text-xs font-bold text-indigo-200 uppercase">Top 5 Players</span>
+                                         <i className="fas fa-crown text-yellow-400 text-xs"></i>
+                                     </div>
+                                     <div className="space-y-3 overflow-y-auto custom-scroll-light pr-1">
+                                         {topScores.length > 0 ? topScores.map((entry, idx) => (
+                                             <div key={idx} className="flex items-center justify-between text-xs">
+                                                 <div className="flex items-center gap-3">
+                                                     <span className={`font-black w-4 text-center ${idx === 0 ? 'text-yellow-300' : idx === 1 ? 'text-slate-300' : idx === 2 ? 'text-amber-600' : 'text-indigo-300'}`}>{idx + 1}</span>
+                                                     <div className="flex flex-col">
+                                                         <span className="font-bold text-white truncate max-w-[80px]">{entry.player_name}</span>
+                                                         <span className="text-[10px] text-white/50">{entry.details.rank}</span>
+                                                     </div>
+                                                 </div>
+                                                 <span className="font-mono font-bold text-indigo-100">{Math.floor(entry.score)}</span>
+                                             </div>
+                                         )) : (
+                                             <div className="text-center py-4 text-indigo-300/50 text-xs">
+                                                 暂无记录，等你来挑战！
+                                             </div>
+                                         )}
+                                     </div>
+                                 </div>
+                             </>
+                         ) : (
+                             <div className="text-center py-10 opacity-60">
+                                 <i className="fas fa-box-open text-3xl mb-2"></i>
+                                 <p className="text-sm">暂无挑战</p>
                              </div>
-                             <div className="flex justify-between text-xs font-medium items-center opacity-40">
-                                 <div className="flex items-center gap-3"><span className="text-amber-700 w-4">#3</span> <span>虚位以待</span></div>
-                                 <span className="font-mono">---</span>
-                             </div>
-                         </div>
+                         )}
                      </div>
 
-                     <button className="mt-auto w-full py-4 bg-white text-indigo-700 rounded-xl font-bold hover:bg-indigo-50 transition-colors shadow-lg opacity-50 cursor-not-allowed flex items-center justify-center gap-2">
-                        <i className="fas fa-lock"></i> 暂未开放
-                     </button>
+                     {challenges.length > 0 && (
+                        <button onClick={() => onStart(challenges[0])} className="mt-4 w-full py-4 bg-white text-indigo-700 rounded-xl font-bold hover:bg-indigo-50 transition-colors shadow-lg flex items-center justify-center gap-2 active:scale-95 relative z-20">
+                            <i className="fas fa-bolt"></i> 立即挑战
+                        </button>
+                     )}
                  </div>
 
                  {/* 3. Utils Dock */}
                  <div className="lg:col-span-12">
-                     <div className="bg-white rounded-3xl p-4 shadow-lg shadow-slate-200/50 border border-slate-100 flex flex-wrap md:flex-nowrap justify-between items-center gap-4">
+                    <div className="bg-white rounded-3xl p-4 shadow-lg shadow-slate-200/50 border border-slate-100 flex flex-wrap md:flex-nowrap justify-between items-center gap-4">
                          
                         <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 w-full md:w-auto no-scrollbar">
                              <UtilityButton icon="fa-trophy" label="成就墙" onClick={() => setShowAchievements(true)} color="text-yellow-600 bg-yellow-50 hover:bg-yellow-100" />
+                             <UtilityButton icon="fa-list-ol" label="排行榜" onClick={() => openLeaderboard(null)} color="text-purple-600 bg-purple-50 hover:bg-purple-100" />
                              <UtilityButton icon="fa-history" label="日志" onClick={() => setShowChangelog(true)} color="text-indigo-600 bg-indigo-50 hover:bg-indigo-100" />
                              <UtilityButton icon="fa-heart" label="赞助" onClick={() => setShowSponsor(true)} color="text-rose-600 bg-rose-50 hover:bg-rose-100" />
                              <UtilityButton icon="fa-cog" label="关于" onClick={() => setShowSettings(true)} color="text-slate-600 bg-slate-50 hover:bg-slate-100" />
@@ -176,18 +257,13 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                             <a href="https://v.wjx.cn/vm/exSyEK0.aspx" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-emerald-50 text-emerald-700 font-bold hover:bg-emerald-100 transition-colors text-sm">
                                 <i className="fas fa-poll-h"></i> 反馈
                             </a>
-                            <a href="https://github.com/liuenyin/recallbj8z" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-colors text-sm shadow-md">
-                                <i className="fab fa-github"></i> GitHub
-                            </a>
                         </div>
-
                      </div>
                  </div>
 
              </div>
 
              {/* Modals */}
-             
              {showAchievements && (
                  <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn" onClick={() => setShowAchievements(false)}>
                     <div className="bg-white rounded-[2rem] p-8 max-w-4xl w-full h-[80vh] shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
@@ -217,7 +293,11 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                     </div>
                  </div>
              )}
-
+             
+             {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} initialChallengeId={leaderboardInitId} />}
+             
+             {/* ... Other modals remain unchanged ... */}
+             
              {showChangelog && (
                  <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn" onClick={() => setShowChangelog(false)}>
                      <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
@@ -268,31 +348,7 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                      </div>
                  </div>
              )}
-
-             {showQQGroup && (
-                 <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn" onClick={() => setShowQQGroup(false)}>
-                     <div className="bg-white rounded-[2rem] p-6 md:p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center relative" onClick={e => e.stopPropagation()}>
-                         <button onClick={() => setShowQQGroup(false)} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"><i className="fas fa-times"></i></button>
-                         
-                         <h2 className="text-2xl font-black text-slate-800 mb-2">加入玩家组织</h2>
-                         <p className="text-slate-500 text-sm mb-6">与其他八中人一起摸鱼聊天</p>
-                         
-                         <div className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm mb-6 w-full">
-                            <img src="https://cdn.luogu.com.cn/upload/image_hosting/8ie1u0ux.png" alt="QQ群二维码" className="w-full h-auto rounded-lg" />
-                         </div>
-
-                         <div className="bg-slate-50 rounded-xl p-3 w-full mb-4 flex justify-between items-center border border-slate-100">
-                            <span className="text-xs text-slate-400 font-bold uppercase">群号</span>
-                            <span className="text-lg font-black text-slate-700 font-mono select-all">1080382240</span>
-                         </div>
-
-                         <a href="https://qm.qq.com/q/q2BmOLORHy" target="_blank" rel="noopener noreferrer" className="w-full bg-blue-500 text-white py-3 rounded-xl font-bold hover:bg-blue-600 transition-colors shadow-lg shadow-blue-200 flex items-center justify-center gap-2">
-                             <i className="fab fa-qq"></i> 一键加群
-                         </a>
-                     </div>
-                 </div>
-             )}
-
+             
              {showSettings && (
                  <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn" onClick={() => setShowSettings(false)}>
                      <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
@@ -301,6 +357,7 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                              <button onClick={() => setShowSettings(false)} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"><i className="fas fa-times"></i></button>
                          </div>
                          <div className="overflow-y-auto custom-scroll space-y-6 pr-2">
+                             {/* ... Content ... */}
                              <div className="space-y-4">
                                  <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs border-b border-slate-100 pb-2">关于本项目</h3>
                                  <p className="text-sm text-slate-600 leading-relaxed">
@@ -312,7 +369,6 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                                  </div>
                              </div>
                              
-                             {/* Added Formula Section */}
                              <div className="space-y-4">
                                  <h3 className="font-black text-slate-400 uppercase tracking-widest text-xs border-b border-slate-100 pb-2">游戏机制</h3>
                                  <div className="text-sm text-slate-600 space-y-2">
@@ -336,7 +392,7 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
 };
 
 const UtilityButton = ({ icon, label, onClick, color }: { icon: string, label: string, onClick: () => void, color: string }) => (
-    <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all text-sm whitespace-nowrap ${color}`}>
+    <button onClick={onClick} className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold transition-all shadow-sm active:scale-95 whitespace-nowrap ${color}`}>
         <i className={`fas ${icon}`}></i> {label}
     </button>
 );

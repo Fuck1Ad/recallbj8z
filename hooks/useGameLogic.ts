@@ -1,26 +1,27 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Phase, GameState, GameEvent, SubjectKey, ExamResult, SubjectStats, GeneralStats, CompetitionResultData, GameStatus, Difficulty, ClubId, WeekendActivity, OIStats, GameLogEntry, Talent, Item } from '../types';
-import { DIFFICULTY_PRESETS, MECHANICS_CONFIG } from '../data/constants';
-import { TALENTS, ACHIEVEMENTS, STATUSES, CLUBS, WEEKEND_ACTIVITIES } from '../data/mechanics';
-import { PHASE_EVENTS, BASE_EVENTS, CHAINED_EVENTS, generateStudyEvent, generateRandomFlavorEvent, generateSummerLifeEvent, generateOIEvent, SCIENCE_FESTIVAL_EVENT, NEW_YEAR_GALA_EVENT } from '../data/events';
-import { modifySub, modifyOI } from '../data/utils';
 
-// --- Initial State Generators ---
+import { useState, useEffect, useCallback } from 'react';
+import { 
+    GameState, Difficulty, GeneralStats, Talent, Challenge, 
+    Phase, GameStatus, SubjectKey, OIStats, GameEvent, 
+    EventChoice, ExamResult, ClubId, Item, WeekendActivity
+} from '../types';
+import { DIFFICULTY_PRESETS } from '../data/constants';
+import { PHASE_EVENTS, generateSummerLifeEvent, generateStudyEvent, generateOIEvent, generateRandomFlavorEvent } from '../data/events';
+import { WEEKEND_ACTIVITIES, STATUSES, ACHIEVEMENTS } from '../data/mechanics';
+import { modifyOI, modifySub } from '../data/utils';
 
-const getInitialSubjects = (): Record<SubjectKey, SubjectStats> => ({
-  chinese: { aptitude: 0, level: 0 },
-  math: { aptitude: 0, level: 0 },
-  english: { aptitude: 0, level: 0 },
-  physics: { aptitude: 0, level: 0 },
-  chemistry: { aptitude: 0, level: 0 },
-  biology: { aptitude: 0, level: 0 },
-  history: { aptitude: 0, level: 0 },
-  geography: { aptitude: 0, level: 0 },
-  politics: { aptitude: 0, level: 0 },
-});
+const STORAGE_KEY = 'recall_save_v1';
 
-const getInitialGeneral = (): GeneralStats => ({
-  mindset: 50, experience: 10, luck: 50, romance: 10, health: 80, money: 20, efficiency: 10
+const getInitialSubjects = (): Record<SubjectKey, { aptitude: number; level: number }> => ({
+    chinese: { aptitude: 0, level: 0 },
+    math: { aptitude: 0, level: 0 },
+    english: { aptitude: 0, level: 0 },
+    physics: { aptitude: 0, level: 0 },
+    chemistry: { aptitude: 0, level: 0 },
+    biology: { aptitude: 0, level: 0 },
+    history: { aptitude: 0, level: 0 },
+    geography: { aptitude: 0, level: 0 },
+    politics: { aptitude: 0, level: 0 }
 });
 
 const getInitialOIStats = (): OIStats => ({
@@ -31,17 +32,18 @@ const getInitialGameState = (): GameState => ({
     isPlaying: false,
     eventQueue: [],
     phase: Phase.INIT,
-    week: 0,
+    week: 1,
     totalWeeksInPhase: 0,
     subjects: getInitialSubjects(),
-    general: getInitialGeneral(),
-    initialGeneral: getInitialGeneral(),
+    general: { mindset: 50, experience: 0, luck: 50, romance: 0, health: 100, money: 0, efficiency: 10 },
+    initialGeneral: { mindset: 50, experience: 0, luck: 50, romance: 0, health: 100, money: 0, efficiency: 10 },
     oiStats: getInitialOIStats(),
     selectedSubjects: [],
     competition: 'None',
     club: null,
+    hasSelectedClub: false,
     romancePartner: null,
-    className: '待分班',
+    className: '', // Initial empty, waiting for placement exam
     log: [],
     currentEvent: null,
     chainedEvent: null,
@@ -60,311 +62,270 @@ const getInitialGameState = (): GameState => ({
     unlockedAchievements: [],
     achievementPopup: null,
     difficulty: 'NORMAL',
+    activeChallengeId: null,
     isWeekend: false,
     weekendActionPoints: 0,
     weekendProcessed: false,
+    activeMiniGame: null,
     sleepCount: 0,
     rejectionCount: 0,
     talents: [],
     inventory: [],
-    theme: 'light'
+    theme: 'light',
+    hasSleptThisWeek: false,
+    dreamtExam: false,
+    availableWeekendActivityIds: undefined
 });
 
 export const useGameLogic = () => {
     const [state, setState] = useState<GameState>(getInitialGameState());
-    
-    // Weekend Result State (UI related but tied to logic flow)
-    const [weekendResult, setWeekendResult] = useState<{
-        activity: WeekendActivity;
-        diff: string[];
-        resultText: string;
-        newState: GameState;
-    } | null>(null);
-
+    const [weekendResult, setWeekendResult] = useState<{ activity: WeekendActivity; resultText: string; diff: string[] } | null>(null);
     const [hasSave, setHasSave] = useState(false);
 
-    // --- Persistence & Initialization ---
     useEffect(() => {
-        const savedAchievements = localStorage.getItem('bz_sim_achievements');
-        const saveGame = localStorage.getItem('bz_sim_save_v1');
-
-        if (savedAchievements) {
-            setState(prev => ({ ...prev, unlockedAchievements: JSON.parse(savedAchievements) }));
-        }
-        if (saveGame) {
-            setHasSave(true);
-        }
-        
-        // Force light mode cleanup
-        document.body.classList.remove('dark');
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) setHasSave(true);
     }, []);
 
-    const saveGame = useCallback(() => {
-        if (state.currentEvent || state.eventQueue.length > 0) return;
-        localStorage.setItem('bz_sim_save_v1', JSON.stringify(state));
-        setHasSave(true);
-        setState(prev => ({
-            ...prev,
-            log: [...prev.log, { message: "游戏进度已保存。", type: 'success', timestamp: Date.now() }]
-        }));
-    }, [state]);
-
-    const loadGame = useCallback(() => {
-        const saved = localStorage.getItem('bz_sim_save_v1');
-        if (!saved) return false;
-        try {
-            const loadedState = JSON.parse(saved) as GameState;
-            setState({ ...loadedState, isPlaying: false });
-            return true;
-        } catch (e) {
-            console.error("Load failed", e);
-            return false;
-        }
-    }, []);
-
-    const unlockAchievement = useCallback((id: string) => {
+    const advancePhase = useCallback(() => {
         setState(prev => {
-            if (prev.difficulty !== 'REALITY') return prev;
-            if (prev.unlockedAchievements.includes(id)) return prev;
-            
-            const newUnlocked = [...prev.unlockedAchievements, id];
-            localStorage.setItem('bz_sim_achievements', JSON.stringify(newUnlocked));
-            const ach = ACHIEVEMENTS[id];
-            
-            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            let nextPhase = Phase.SEMESTER_1; 
+            let weeks = 21; // Default Semester length
+            const currentPhase = prev.phase;
+
+            switch (currentPhase) {
+                case Phase.INIT: nextPhase = Phase.SUMMER; weeks = 8; break;
+                case Phase.SUMMER: nextPhase = Phase.MILITARY; weeks = 2; break; // Military 2 weeks
+                case Phase.MILITARY: nextPhase = Phase.SELECTION; weeks = 0; break; 
+                case Phase.SELECTION: nextPhase = Phase.PLACEMENT_EXAM; weeks = 0; break;
+                case Phase.PLACEMENT_EXAM: nextPhase = Phase.SEMESTER_1; weeks = 21; break; // Semester 21 weeks
+                // Midterm handled inside loop, no phase break needed in linear flow usually, but we keep phase concept for UI
+                // If coming from Midterm, we don't use advancePhase usually, but if we do:
+                case Phase.MIDTERM_EXAM: nextPhase = Phase.SUBJECT_RESELECTION; weeks = 0; break;
+                case Phase.SUBJECT_RESELECTION: nextPhase = Phase.SEMESTER_1; weeks = 21; break; // Resume or restart?
+                case Phase.SEMESTER_1: 
+                    // If we finished 21 weeks
+                    nextPhase = Phase.FINAL_EXAM; weeks = 0; 
+                    break;
+                case Phase.CSP_EXAM: nextPhase = Phase.SEMESTER_1; weeks = prev.totalWeeksInPhase; break; // Return
+                case Phase.NOIP_EXAM: nextPhase = Phase.SEMESTER_1; weeks = prev.totalWeeksInPhase; break;
+                case Phase.FINAL_EXAM: nextPhase = Phase.ENDING; weeks = 0; break;
+                default: nextPhase = Phase.ENDING; weeks = 0;
+            }
             
             return {
                 ...prev,
-                unlockedAchievements: newUnlocked,
-                achievementPopup: ach || null,
-                log: [...prev.log, { message: `【成就解锁】${ach?.title || id}`, type: 'success', timestamp: Date.now() }]
+                phase: nextPhase,
+                week: 1,
+                totalWeeksInPhase: weeks,
+                isPlaying: nextPhase !== Phase.ENDING && nextPhase !== Phase.SELECTION,
+                log: [...prev.log, { message: `进入新阶段: ${nextPhase}`, type: 'info', timestamp: Date.now() }]
             };
         });
-        setTimeout(() => {
-            setState(prev => ({ ...prev, achievementPopup: null }));
-        }, 3000);
     }, []);
 
-    // --- Dynamic Logic ---
-    const weekendOptions = useMemo(() => {
-        if (!state.isWeekend) return [];
-        let candidates = WEEKEND_ACTIVITIES.filter(a => !a.condition || a.condition(state));
-
-        if (state.difficulty === 'REALITY') {
-            const mandatory = candidates.filter(a => a.type === 'LOVE' || a.type === 'OI');
-            let pool = candidates.filter(a => a.type !== 'LOVE' && a.type !== 'OI');
-
-            if (state.general.health < 30 || state.general.mindset < 30 || state.general.efficiency < 0) {
-                pool = pool.filter(a => a.type !== 'STUDY');
-            }
-
-            pool = pool.sort(() => 0.5 - Math.random());
-            const slotsNeeded = Math.max(0, 6 - mandatory.length);
-            const selectedPool = pool.slice(0, slotsNeeded);
-            candidates = [...mandatory, ...selectedPool];
-        }
-
-        return candidates.sort((a, b) => {
-             const aPriority = (a.type === 'LOVE' || a.type === 'OI') ? 1 : 0;
-             const bPriority = (b.type === 'LOVE' || b.type === 'OI') ? 1 : 0;
-             return bPriority - aPriority;
-        });
-    }, [state.isWeekend, state.week, state.difficulty, state.general, state.romancePartner, state.competition]);
-
-    // --- Time Loop ---
+    // --- MAIN GAME LOOP ---
     useEffect(() => {
-        let interval: ReturnType<typeof setInterval>;
-        if (state.isPlaying && !state.currentEvent && state.eventQueue.length === 0 && !state.popupCompetitionResult && !state.popupExamResult && state.phase !== Phase.ENDING && state.phase !== Phase.WITHDRAWAL && !state.isWeekend && !weekendResult) {
-            interval = setInterval(() => {
-                processWeekStep();
-            }, 1500);
-        }
-        return () => clearInterval(interval);
-    }, [state.isPlaying, state.currentEvent, state.eventQueue, state.popupCompetitionResult, state.popupExamResult, state.phase, state.isWeekend, weekendResult]);
+        if (!state.isPlaying || state.currentEvent || state.isWeekend || state.weekendProcessed) return;
 
-    // --- Event Queue ---
-    useEffect(() => {
-        if (!state.currentEvent && state.eventQueue.length > 0 && !state.popupCompetitionResult && !state.isWeekend && !weekendResult) {
-            const nextEvent = state.eventQueue[0];
-            setState(prev => ({
-                ...prev,
-                currentEvent: nextEvent,
-                eventQueue: prev.eventQueue.slice(1),
-                isPlaying: false
-            }));
-        }
-    }, [state.eventQueue, state.currentEvent, state.popupCompetitionResult, state.isWeekend, weekendResult]);
-
-
-    // --- Core Game Functions ---
-
-    const processWeekStep = () => {
-        setState(prev => {
-            // Critical Check
-            if (prev.general.health <= 0 || prev.general.mindset <= 0) {
-                return { ...prev, phase: Phase.WITHDRAWAL, isPlaying: false, currentEvent: null, eventQueue: [], log: [...prev.log, { message: "你的身心状态已达极限，被迫休学...", type: 'error', timestamp: Date.now() }] };
+        const processTurn = () => {
+            // 0. Handle Queue first
+            if (state.eventQueue.length > 0) {
+                const [next, ...rest] = state.eventQueue;
+                setState(prev => ({ ...prev, currentEvent: next, eventQueue: rest, isPlaying: false }));
+                return;
             }
 
-            // Achievement Checks
-            if (prev.general.money >= 200) unlockAchievement('rich');
-            if (prev.general.money <= -250) unlockAchievement('in_debt');
-            if (prev.general.health < 10 && prev.phase === Phase.SEMESTER_1) unlockAchievement('survival');
-            if (prev.general.romance >= 150) unlockAchievement('romance_master');
-            if (prev.rejectionCount >= 5) unlockAchievement('nice_person');
-
-            let nextPhase = prev.phase;
-            let nextWeek = prev.week + 1;
-            let nextTotal = prev.totalWeeksInPhase;
-            let eventsToAdd: GameEvent[] = [];
-            let forcePause = false;
-            let triggerClubSelection = false;
-            let newLogs: GameLogEntry[] = [];
-
-            // Stats Regression
-            let nextGeneral = { ...prev.general };
-            let nextSubjects = { ...prev.subjects };
-            let nextOIStats = { ...prev.oiStats };
-            
-            (['mindset', 'experience', 'luck', 'romance', 'health'] as (keyof GeneralStats)[]).forEach(k => {
-                 const diff = nextGeneral[k] - prev.initialGeneral[k];
-                 nextGeneral[k] -= diff * MECHANICS_CONFIG.GENERAL_REGRESSION_RATE;
-            });
-            const effDiff = nextGeneral.efficiency - prev.initialGeneral.efficiency;
-            nextGeneral.efficiency -= effDiff * MECHANICS_CONFIG.EFFICIENCY_REGRESSION_RATE;
-            
-            (Object.keys(nextSubjects) as SubjectKey[]).forEach(k => {
-                if (nextSubjects[k].level > 0) nextSubjects[k] = { ...nextSubjects[k], level: nextSubjects[k].level * (1 - MECHANICS_CONFIG.SUBJECT_DECAY_RATE) };
-            });
-
-            // Phase Transitions
-            if (prev.phase === Phase.SUMMER && prev.week >= 8) { nextPhase = Phase.MILITARY; nextWeek = 1; nextTotal = 2; }
-            else if (prev.phase === Phase.MILITARY && prev.week >= 2) { nextPhase = Phase.SELECTION; nextWeek = 0; forcePause = true; }
-            else if (prev.phase === Phase.SEMESTER_1) {
-                if (prev.week === 2 && !prev.club) triggerClubSelection = true;
-                if (prev.competition === 'OI' && prev.week === 10) { nextPhase = Phase.CSP_EXAM; forcePause = true; }
-                else if (prev.week === 11) { nextPhase = Phase.MIDTERM_EXAM; forcePause = true; } 
-                else if (prev.competition === 'OI' && prev.week === 18) { nextPhase = Phase.NOIP_EXAM; forcePause = true; }
-                else if (prev.week >= 21) { nextPhase = Phase.FINAL_EXAM; nextWeek = 0; forcePause = true; }
+            // 1. Check Phase Progression
+            if (state.totalWeeksInPhase > 0 && state.week > state.totalWeeksInPhase) {
+                advancePhase();
+                return;
             }
 
-            // We handle showClubSelection by passing a flag in state, or App observing it.
-            // Let's assume App observes state changes or we add a one-off flag.
-            // For simplicity, we just pause here. The App component will check `if (state.phase === SEMESTER_1 && state.week === 2 && !state.club)`
-            
-            if (nextPhase !== prev.phase || triggerClubSelection) {
-                return { ...prev, phase: nextPhase, week: nextWeek, totalWeeksInPhase: nextTotal, isPlaying: false };
+            // 2. Special Fixed Trigger: Midterm at Week 11
+            if (state.phase === Phase.SEMESTER_1 && state.week === 11 && !state.midtermRank) {
+                setState(prev => ({
+                    ...prev,
+                    phase: Phase.MIDTERM_EXAM,
+                    isPlaying: false
+                }));
+                return;
             }
 
-            // Weekend Logic
-            if (prev.phase === Phase.SEMESTER_1 && !prev.isWeekend && !prev.weekendProcessed && prev.week > 0) {
-                 let ap = 2; 
-                 let logs: GameLogEntry[] = [];
-                 
-                 if (prev.competition === 'OI') {
-                     ap -= 1;
-                     logs.push({ message: "【周末】参加了竞赛课，OI能力略微提升。", type: 'info', timestamp: Date.now() });
-                     nextOIStats.misc += 0.5;
-                 }
-                 if (prev.club && prev.club !== 'none' && prev.week % 4 === 0) {
-                     ap -= 1;
-                     const clubData = CLUBS.find(c => c.id === prev.club);
-                     if (clubData) {
-                         logs.push({ message: `【周末】参加了${clubData.name}活动。`, type: 'info', timestamp: Date.now() });
-                         const updates = clubData.action(prev);
-                         if (updates.general) nextGeneral = { ...nextGeneral, ...updates.general };
-                         if (updates.subjects) nextSubjects = { ...nextSubjects, ...updates.subjects }; 
-                     }
-                 }
-                 
-                 if (ap > 0) {
-                     return { ...prev, general: nextGeneral, subjects: nextSubjects, oiStats: nextOIStats, isWeekend: true, weekendActionPoints: ap, isPlaying: false, log: [...prev.log, ...logs, { message: "周末到了，自由支配时间。", type: 'info', timestamp: Date.now() }] };
-                 } else {
-                     logs.push({ message: "周末行程排满，无自由活动时间。", type: 'warning', timestamp: Date.now() });
-                     newLogs.push(...logs);
+            // 3. Generate Week's Events
+            let weekEvents: GameEvent[] = [];
+            const phasePool = PHASE_EVENTS[state.phase] || [];
+
+            // 3a. Fixed Events in current Phase/Week
+            const pendingFixed = phasePool.filter(e => 
+                e.triggerType === 'FIXED' && 
+                e.fixedWeek === state.week && 
+                !state.triggeredEvents.includes(e.id)
+            );
+            weekEvents.push(...pendingFixed);
+
+            // 3b. Conditional Events (Prioritized)
+            // e.g., Confession if romance > 20
+            const conditionalEvents = phasePool.filter(e => 
+                e.triggerType === 'CONDITIONAL' &&
+                (!e.once || !state.triggeredEvents.includes(e.id)) &&
+                e.condition && e.condition(state)
+            );
+            // If there are conditional events, maybe pick one to add? Or add all?
+            // To prevent spam, let's pick 1 conditional event max per week if not fixed
+            if (conditionalEvents.length > 0) {
+                 const picked = conditionalEvents[Math.floor(Math.random() * conditionalEvents.length)];
+                 // Only add if not already added by fixed logic
+                 if (!weekEvents.find(ev => ev.id === picked.id)) {
+                     weekEvents.push(picked);
                  }
             }
 
-            // Regular Week
-            let activeStatuses = prev.activeStatuses.map(s => ({ ...s, duration: s.duration - 1 })).filter(s => s.duration > 0);
-            nextGeneral.health = Math.max(0, nextGeneral.health - 0.8);
-            nextGeneral.money += 2;
+            // 3c. Regular Events (Phase Specific Randoms)
+            const randomPhaseEvents = phasePool.filter(e => 
+                e.triggerType === 'RANDOM' &&
+                (!e.once || !state.triggeredEvents.includes(e.id)) &&
+                (!e.condition || e.condition(state))
+            );
 
-            if (nextGeneral.money < 0 && Math.random() < 0.3 && !activeStatuses.find(s => s.id === 'debt')) {
-                eventsToAdd.unshift(BASE_EVENTS['debt_collection']);
-                activeStatuses.push({ ...STATUSES['debt'], duration: 1 });
-            }
-
-            // Status triggers
-            if (nextGeneral.romance >= 25 && !prev.romancePartner) {
-                if (Math.random() < 0.2 && !activeStatuses.find(s => s.id === 'crush_pending')) activeStatuses.push({ ...STATUSES['crush_pending'], duration: 3 });
-                if (nextGeneral.romance >= 35 && Math.random() < 0.15 && !activeStatuses.find(s => s.id === 'crush')) activeStatuses.push({ ...STATUSES['crush'], duration: 4 });
-            }
-            if (nextGeneral.health < 30 && !activeStatuses.find(s => s.id === 'exhausted') && Math.random() < 0.4) activeStatuses.push({ ...STATUSES['exhausted'], duration: 3 });
-            if (nextGeneral.efficiency > 15 && nextGeneral.mindset > 70 && !activeStatuses.find(s => s.id === 'focused') && Math.random() < 0.15) activeStatuses.push({ ...STATUSES['focused'], duration: 2 });
-
-            activeStatuses.forEach(s => {
-                if (s.id === 'anxious') nextGeneral.mindset -= 1.5;
-                if (s.id === 'exhausted') nextGeneral.health -= 1.5;
-                if (s.id === 'focused') nextGeneral.efficiency += 0.5;
-                if (s.id === 'in_love') nextGeneral.mindset += 2;
-                if (s.id === 'heartbroken') { nextGeneral.mindset -= 3; nextGeneral.efficiency -= 1; }
-                if (s.id === 'debt') { nextGeneral.mindset -= 2; nextGeneral.romance -= 0.5; }
-                if (s.id === 'crush_pending') { nextGeneral.luck += 0.5; nextGeneral.experience += 0.5; }
-                if (s.id === 'crush') { nextGeneral.efficiency -= 0.4; nextGeneral.romance += 0.5; }
-            });
-
-            // Event Generation
-            if (nextPhase === Phase.SUMMER && prev.week > 1) {
-                if (Math.random() < 0.7) eventsToAdd.push(generateSummerLifeEvent(prev));
-                if (prev.competition === 'OI' && Math.random() < 0.5) eventsToAdd.push(generateOIEvent(prev));
-            }
-            if (nextPhase === Phase.SEMESTER_1) {
-                eventsToAdd.push(generateStudyEvent(prev));
-                eventsToAdd.push(generateRandomFlavorEvent(prev));
-                if (nextWeek === 15) eventsToAdd.push(SCIENCE_FESTIVAL_EVENT);
-                if (nextWeek === 19) {
-                    let gala = { ...NEW_YEAR_GALA_EVENT };
-                    if (prev.romancePartner) {
-                        // @ts-ignore
-                        gala.choices = [{ text: `和${prev.romancePartner}溜出去逛街`, action: (s) => ({ general: { ...s.general, romance: s.general.romance + 30, mindset: s.general.mindset + 20, money: s.general.money - 50 }, activeStatuses: [...s.activeStatuses, { ...STATUSES['in_love'], duration: 5 }] }) }, ...(gala.choices || [])];
-                    }
-                    eventsToAdd.push(gala);
+            // 3d. Generation Logic
+            if (state.phase === Phase.SUMMER) {
+                 // Summer has specific logic in previous code, but let's mix it
+                 weekEvents.push(generateSummerLifeEvent(state));
+            } else if (state.phase === Phase.MILITARY) {
+                 if (randomPhaseEvents.length > 0) {
+                     weekEvents.push(randomPhaseEvents[Math.floor(Math.random() * randomPhaseEvents.length)]);
+                 }
+            } else if (state.phase === Phase.SEMESTER_1) {
+                // FIXED: Semester 1 has Weekly Study + 1-2 Random Events
+                weekEvents.push(generateStudyEvent(state));
+                
+                // Try to pick a specific semester event first
+                if (randomPhaseEvents.length > 0 && Math.random() < 0.3) {
+                     weekEvents.push(randomPhaseEvents[Math.floor(Math.random() * randomPhaseEvents.length)]);
+                } else {
+                    // Fallback to generic flavor
+                    weekEvents.push(generateRandomFlavorEvent(state));
                 }
+                
+                // Chance for 2nd flavor event
+                if (Math.random() < 0.4) { 
+                    weekEvents.push(generateRandomFlavorEvent(state));
+                }
+
+                // OI Events Override/Add
+                if (state.competition === 'OI' && Math.random() < 0.3) {
+                     weekEvents.push(generateOIEvent(state));
+                }
+            } else {
+                 // Fallback for other phases
+                 weekEvents.push(Math.random() < 0.7 ? generateStudyEvent(state) : generateRandomFlavorEvent(state));
             }
 
-            const phaseEvents = PHASE_EVENTS[nextPhase] || [];
-            const eligible = phaseEvents.filter(e => e.triggerType !== 'FIXED' && (!e.once || !prev.triggeredEvents.includes(e.id)) && (!e.condition || e.condition(prev)));
-            const fixedWeekEvents = phaseEvents.filter(e => e.triggerType === 'FIXED' && e.fixedWeek === nextWeek);
-            eventsToAdd.push(...fixedWeekEvents);
+            // Mark fixed/conditional events as triggered
+            // Note: We only mark 'once' events as triggered
+            const eventsToMark = weekEvents.filter(e => e.once || e.triggerType === 'FIXED').map(e => e.id);
+
+            // Set the first event and queue the rest
+            const [first, ...rest] = weekEvents;
             
-            let eventProb = nextPhase === Phase.SUMMER ? 0.4 : (nextPhase === Phase.MILITARY ? 1.0 : 0.4);
-            if (eligible.length > 0 && Math.random() < eventProb) {
-                eventsToAdd.push(eligible[Math.floor(Math.random() * eligible.length)]);
+            if (first) {
+                setState(prev => ({
+                    ...prev,
+                    currentEvent: first,
+                    eventQueue: rest,
+                    triggeredEvents: [...prev.triggeredEvents, ...eventsToMark],
+                    isPlaying: false
+                }));
+            } else {
+                startWeekend();
+            }
+        };
+
+        const timer = setTimeout(processTurn, 1000); 
+        return () => clearTimeout(timer);
+    }, [state.isPlaying, state.currentEvent, state.isWeekend, state.week, state.phase, state.eventQueue.length, state.midtermRank, advancePhase, state.competition, state.triggeredEvents]);
+
+    const startWeekend = () => {
+        setState(prev => {
+            // Reality Mode: Restrict weekend activities
+            let availableIds = undefined;
+            if (prev.difficulty === 'REALITY') {
+                // IMPORTANT: Filter valid activities FIRST, then pick 6
+                // This ensures we don't pick invalid ones that get hidden later
+                const validActivities = WEEKEND_ACTIVITIES.filter(a => !a.condition || a.condition(prev));
+                let validIds = validActivities.map(a => a.id);
+                
+                // Fisher-Yates shuffle
+                for (let i = validIds.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [validIds[i], validIds[j]] = [validIds[j], validIds[i]];
+                }
+                
+                availableIds = validIds.slice(0, 6);
             }
 
             return {
-                ...prev, phase: nextPhase, week: nextWeek, totalWeeksInPhase: nextTotal,
-                general: nextGeneral, subjects: nextSubjects, activeStatuses, oiStats: nextOIStats,
-                eventQueue: [...prev.eventQueue, ...eventsToAdd],
-                log: [...prev.log, ...newLogs, { message: `Week ${nextWeek}`, type: 'info', timestamp: Date.now() }],
-                weekendProcessed: false
+                ...prev,
+                isWeekend: true,
+                isPlaying: false,
+                weekendActionPoints: 2,
+                availableWeekendActivityIds: availableIds
             };
         });
     };
 
-    const startGameState = (difficulty: Difficulty, customStats: GeneralStats, selectedTalents: Talent[]) => {
-        const rolledSubjects = getInitialSubjects();
-        (Object.keys(rolledSubjects) as SubjectKey[]).forEach(k => {
-            rolledSubjects[k] = { aptitude: Math.floor(Math.random() * 40 + 60), level: Math.floor(Math.random() * 10 + 5) };
-            if (difficulty === 'NORMAL') { rolledSubjects[k].aptitude += 15; rolledSubjects[k].level += 5; }
-        });
+    const saveGame = () => {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        setHasSave(true);
+        setState(s => ({ ...s, log: [...s.log, { message: "游戏进度已保存。", type: 'success', timestamp: Date.now() }] }));
+    };
 
-        let initialGeneral = difficulty === 'CUSTOM' ? { ...customStats } : { ...DIFFICULTY_PRESETS[difficulty].stats };
+    const loadGame = (): boolean => {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            try {
+                const loaded = JSON.parse(saved);
+                setState(loaded);
+                return true;
+            } catch (e) {
+                console.error("Failed to load save", e);
+                return false;
+            }
+        }
+        return false;
+    };
+
+    const startGameState = (difficulty: Difficulty, customStats: GeneralStats, selectedTalents: Talent[], activeChallenge?: Challenge | null) => {
+        let initialGeneral = { ...DIFFICULTY_PRESETS['NORMAL'].stats };
+        const effectiveDifficulty = activeChallenge ? 'REALITY' : (difficulty === 'CUSTOM' ? 'NORMAL' : difficulty);
+        
+        if (difficulty === 'CUSTOM' && !activeChallenge) {
+            initialGeneral = { ...customStats };
+        } else {
+             initialGeneral = { ...DIFFICULTY_PRESETS[effectiveDifficulty].stats };
+        }
+        
         let initialStatuses: GameStatus[] = [];
-        if (difficulty === 'REALITY') {
+        if (effectiveDifficulty === 'REALITY') {
             initialStatuses.push({ ...STATUSES['anxious'], duration: 4 });
             initialStatuses.push({ ...STATUSES['debt'], duration: 2 });
         }
+        
+        if (activeChallenge) {
+             if (activeChallenge.conditions.initialStats) {
+                 initialGeneral = { ...initialGeneral, ...activeChallenge.conditions.initialStats };
+             }
+             if (activeChallenge.id === 'c_sleep_king') {
+                 initialStatuses.push({ ...STATUSES['sleep_compulsion'], duration: 999 });
+             }
+        }
+
+        const rolledSubjects = getInitialSubjects();
+        (Object.keys(rolledSubjects) as SubjectKey[]).forEach(k => {
+            rolledSubjects[k] = { aptitude: Math.floor(Math.random() * 40 + 60), level: Math.floor(Math.random() * 10 + 5) };
+            if (effectiveDifficulty === 'NORMAL') { rolledSubjects[k].aptitude += 15; rolledSubjects[k].level += 5; }
+        });
 
         let tempState: GameState = {
             ...getInitialGameState(),
@@ -374,9 +335,11 @@ export const useGameLogic = () => {
             activeStatuses: initialStatuses,
             talents: selectedTalents,
             oiStats: getInitialOIStats(),
-            difficulty
+            difficulty: effectiveDifficulty,
+            activeChallengeId: activeChallenge ? activeChallenge.id : null,
+            hasSleptThisWeek: false
         };
-
+        
         selectedTalents.forEach(t => {
             if (t.effect) {
                 const updates = t.effect(tempState);
@@ -388,9 +351,9 @@ export const useGameLogic = () => {
         tempState.initialGeneral = { ...tempState.general };
 
         const firstEvent = PHASE_EVENTS[Phase.SUMMER].find(e => e.id === 'sum_goal_selection');
-        setState(prev => ({
+        setState({
             ...tempState,
-            unlockedAchievements: prev.unlockedAchievements,
+            unlockedAchievements: state.unlockedAchievements, 
             phase: Phase.SUMMER,
             week: 1,
             totalWeeksInPhase: 8,
@@ -398,197 +361,235 @@ export const useGameLogic = () => {
             triggeredEvents: firstEvent ? [firstEvent.id] : [],
             log: [{ message: "八中模拟器启动。", type: 'success', timestamp: Date.now() }],
             isPlaying: false
-        }));
-        setTimeout(() => unlockAchievement('first_blood'), 100);
+        });
+        
+        if (!activeChallenge && !state.unlockedAchievements.includes('first_blood')) {
+            setTimeout(() => {
+                setState(prev => ({
+                    ...prev,
+                    unlockedAchievements: [...prev.unlockedAchievements, 'first_blood'],
+                    achievementPopup: ACHIEVEMENTS['first_blood']
+                }));
+                setTimeout(() => setState(prev => ({ ...prev, achievementPopup: null })), 3000);
+            }, 100);
+        }
     };
 
-    const handleChoice = (choice: any, visualsCallback?: (oldS: GameState, newS: GameState) => string[]) => {
-        if (navigator.vibrate) navigator.vibrate(10);
-        setState(prev => {
-            const updates = choice.action(prev);
-            const newState = { ...prev, ...updates };
-            if (updates.general) newState.general = { ...prev.general, ...updates.general };
-            
-            const diffs = visualsCallback ? visualsCallback(prev, newState) : [];
-            if (updates.sleepCount) diffs.push("睡觉次数+1");
-            if (updates.rejectionCount) diffs.push("好人卡+1");
-            if (diffs.length === 0) diffs.push("无明显变化");
+    const handleChoice = (choice: EventChoice, visualizer?: (oldS: GameState, newS: GameState) => string[]) => {
+        const oldState = { ...state };
+        let updates = choice.action(state);
+        
+        if (state.activeChallengeId === 'c_sleep_king' && (choice.text.includes('睡') || choice.text.includes('梦') || choice.text.includes('补觉'))) {
+             updates = { ...updates, hasSleptThisWeek: true };
+        }
 
-            return { 
-                ...newState, 
-                eventResult: { choice, diff: diffs },
-                history: [{ week: prev.week, phase: prev.phase, eventTitle: prev.currentEvent?.title || '', choiceText: choice.text, resultSummary: diffs.join(' | '), timestamp: Date.now() }, ...prev.history] 
-            };
-        });
+        const newState = { ...state, ...updates };
+        const diff = visualizer ? visualizer(oldState, newState) : [];
+        
+        setState(prev => ({ ...prev, ...updates, eventResult: { choice, diff } }));
     };
 
     const handleEventConfirm = () => {
-        setState(s => {
-            let nextEvent: GameEvent | null = null;
-            if (s.eventResult?.choice.nextEventId) {
-                 const allEvents = [...Object.values(PHASE_EVENTS).flat(), ...Object.values(CHAINED_EVENTS), ...Object.values(BASE_EVENTS)];
-                 nextEvent = allEvents.find(e => e.id === s.eventResult?.choice.nextEventId) || null;
-            }
-            if (s.chainedEvent) nextEvent = s.chainedEvent;
-            
-            if (nextEvent) {
-                return { ...s, currentEvent: nextEvent, chainedEvent: null, eventResult: null, triggeredEvents: [...s.triggeredEvents, nextEvent.id], isPlaying: false };
-            }
-            return { ...s, currentEvent: null, eventResult: null, isPlaying: true };
-        });
-    };
+        // 1. Handle Chained Event Immediate Trigger
+        if (state.chainedEvent) {
+            setState(prev => ({ ...prev, currentEvent: prev.chainedEvent, chainedEvent: null, eventResult: null }));
+            return;
+        }
+        
+        // 2. Handle Event Queue
+        if (state.eventQueue.length > 0) {
+             setState(prev => {
+                 const [next, ...rest] = prev.eventQueue;
+                 return { ...prev, currentEvent: next, eventQueue: rest, eventResult: null };
+             });
+             return;
+        }
 
-    const handleClubSelect = (clubId: ClubId) => {
-        setState(prev => ({
-            ...prev, club: clubId, isPlaying: true,
-            log: [...prev.log, { message: `你加入了${CLUBS.find(c => c.id === clubId)?.name || '无社团'}。`, type: 'success', timestamp: Date.now() }]
+        // 3. Skip weekend for Summer/Military to streamline flow
+        const skipWeekend = state.phase === Phase.SUMMER || state.phase === Phase.MILITARY;
+        if (skipWeekend) {
+             setState(prev => ({ 
+                 ...prev, 
+                 currentEvent: null, 
+                 eventResult: null,
+                 isWeekend: false, 
+                 week: prev.week + 1, 
+                 hasSleptThisWeek: false, 
+                 isPlaying: true 
+            }));
+            return;
+        }
+
+        // 4. Go to Weekend
+        startWeekend();
+    };
+    
+    const handleClubSelect = (id: ClubId | 'none') => {
+        setState(prev => ({ 
+            ...prev, 
+            club: id === 'none' ? null : id,
+            hasSelectedClub: true // Flag to stop the prompt
         }));
     };
-
-    const handleShopPurchase = (item: Item, visualsCallback?: () => void) => {
-        setState(prev => {
-            if (prev.general.money < item.price) return prev;
-            if (visualsCallback) visualsCallback();
-            const updates = item.effect(prev);
-            return {
-                ...prev, ...updates,
-                general: { ...prev.general, ...updates.general },
-                inventory: [...prev.inventory, item.id],
-                log: [...prev.log, { message: `购买了${item.name}，消费${item.price}元。`, type: 'success', timestamp: Date.now() }]
-            };
-        });
+    
+    const handleShopPurchase = (item: Item, effectVisualizer: () => void) => {
+        const updates = item.effect(state);
+        setState(prev => ({ ...prev, ...updates }));
+        effectVisualizer();
     };
 
-    const handleWeekendActivityClick = (activity: WeekendActivity, visualsCallback: (oldS: GameState, newS: GameState) => string[]) => {
-        if (navigator.vibrate) navigator.vibrate(10);
-        const updates = activity.action(state);
-        const newState = { ...state, ...updates, general: { ...state.general, ...(updates.general || {}) } };
-        if (updates.subjects) newState.subjects = { ...state.subjects, ...updates.subjects };
-        if (updates.oiStats) newState.oiStats = { ...state.oiStats, ...updates.oiStats };
+    const handleWeekendActivityClick = (activity: WeekendActivity, visualizer?: (oldS: GameState, newS: GameState) => string[]) => {
+        if (state.weekendActionPoints <= 0) return;
         
-        const diffs = visualsCallback(state, newState);
-        const resultText = typeof activity.resultText === 'function' ? activity.resultText(state) : activity.resultText;
-        setWeekendResult({ activity, diff: diffs, resultText, newState });
+        const oldState = { ...state };
+        let updates = activity.action(state);
+        let resultText = typeof activity.resultText === 'function' ? activity.resultText(state) : activity.resultText;
+
+        if (state.activeChallengeId === 'c_sleep_king' && (activity.id === 'w_sleep' || activity.name.includes('睡'))) {
+            updates = { 
+                ...updates, hasSleptThisWeek: true,
+                general: { ...updates.general, health: (updates.general?.health || oldState.general.health || 0) + 5, mindset: (updates.general?.mindset || oldState.general.mindset || 0) + 3 } as GeneralStats
+            };
+            
+            const roll = Math.random();
+            if (roll < 0.15) {
+                resultText = "梦里那个公式... e^(π√163) 居然是整数？你的数学直觉大幅提升！";
+                updates.oiStats = modifyOI(oldState, { math: 15, misc: 10 });
+                // @ts-ignore
+                updates.subjects = modifySub(oldState, ['math'], 10);
+            } else if (roll < 0.3) {
+                resultText = "【庄周梦蝶】不知是庄周做梦变成了蝴蝶，还是蝴蝶做梦变成了庄周。你感悟到了生命的真谛。";
+                // @ts-ignore
+                updates.general.mindset += 15; updates.general.efficiency += 5;
+            } else if (roll < 0.45 && !oldState.dreamtExam) {
+                resultText = "【预知梦】你好像梦到了期末考试的压轴题！虽然醒来只记得大概，但足够了！(考试运大幅提升)";
+                // @ts-ignore
+                updates.general.luck += 20; updates.dreamtExam = true;
+            } else if (roll < 0.6) {
+                resultText = "【盗梦空间】你在梦里又睡着了，进入了第二层梦境。在这里，一小时等于现实的一天。你利用这漫长的时间复习了全科内容。";
+                // @ts-ignore
+                updates.subjects = modifySub(oldState, ['math', 'chinese', 'english', 'physics'], 3);
+            } else if (roll < 0.75 && oldState.romancePartner) {
+                resultText = `【春梦了无痕】梦里，${oldState.romancePartner}对你笑了。醒来时嘴角还挂着口水。`;
+                // @ts-ignore
+                updates.general.romance += 10; updates.general.mindset += 10;
+            } else {
+                resultText = "这一觉睡得天昏地暗，感觉整个人都升华了（S属性大爆发）。";
+            }
+        }
+
+        const newState = { ...state, ...updates };
+        const diff = visualizer ? visualizer(oldState, newState) : [];
+        
+        setWeekendResult({ activity, resultText, diff });
+        setState(prev => ({ ...prev, ...updates }));
     };
 
     const confirmWeekendActivity = () => {
-        if (!weekendResult) return;
-        setState(prev => {
-            const nextAP = prev.weekendActionPoints - 1;
-            const isFinished = nextAP <= 0;
-            return {
-                ...weekendResult.newState,
-                weekendActionPoints: nextAP,
-                isWeekend: !isFinished,
-                isPlaying: isFinished,
-                weekendProcessed: isFinished,
-                log: [...prev.log, { message: `周末活动：${weekendResult.activity.name}`, type: 'info', timestamp: Date.now() }]
-            };
-        });
         setWeekendResult(null);
+        setState(prev => {
+             const newPoints = prev.weekendActionPoints - 1;
+             if (newPoints <= 0) {
+                 // Challenge check
+                 if (prev.activeChallengeId === 'c_sleep_king' && !prev.hasSleptThisWeek) {
+                     return { ...prev, weekendActionPoints: 0, isWeekend: false, isPlaying: false, phase: Phase.ENDING, log: [...prev.log, { message: "你这周没有睡觉，困死了！！！(挑战失败)", type: 'error', timestamp: Date.now() }] };
+                 }
+                 return { ...prev, weekendActionPoints: 0, isWeekend: false, isPlaying: true, week: prev.week + 1, hasSleptThisWeek: false };
+             }
+             return { ...prev, weekendActionPoints: newPoints };
+        });
+    };
+    
+    // Rank Calculation Helper
+    const calculateRank = (score: number, phase: Phase) => {
+        // Simplified Logic: Total roughly 750 (450 main + 300 sub) for selection phases, or 1050 if 9 subjects
+        // Placement exam uses 6 subjects = 750 max
+        let maxScore = 750;
+        if (phase === Phase.FINAL_EXAM) maxScore = 1050; // Assume all 9 subjects or 3+3+3
+        
+        const percentage = score / maxScore;
+        const totalStudents = 633;
+        
+        // Z-score simulation: Mean = 0.68, Std = 0.15
+        const mean = 0.68;
+        const std = 0.15;
+        const z = (percentage - mean) / std;
+        
+        // Approx percentile from Z (Error function approximation)
+        // This is a rough estimation
+        let percentile = 0.5 * (1 + Math.sign(z) * Math.sqrt(1 - Math.exp(-2 * z * z / Math.PI)));
+        if (percentage < 0.1) percentile = 0; // clamp low end
+        if (percentage > 0.99) percentile = 0.999;
+        
+        // Higher score = Higher percentile (closer to 1.0)
+        // Rank 1 is top. 
+        const rank = Math.max(1, Math.floor(totalStudents * (1 - percentile)));
+        return rank;
     };
 
     const handleExamFinish = (result: ExamResult) => {
-        setState(prev => {
-            // Exam Logic moved from App.tsx
-            let nextPhase = prev.phase;
-            let className = prev.className;
-            let efficiencyMod = 0;
-            let popupResult: CompetitionResultData | null = null;
-            let popupExamResult = null;
-            let triggeredEvent = prev.currentEvent;
-            let logMsg = '';
-            let nextTotalWeeks = prev.totalWeeksInPhase;
-            let midtermRank = prev.midtermRank;
-  
-            let rank = 0;
-            const totalStudents = 633; 
-            const subjectsTaken = Object.keys(result.scores);
-            let maxPossible = (prev.phase === Phase.CSP_EXAM || prev.phase === Phase.NOIP_EXAM) ? 400 : subjectsTaken.reduce((acc, sub) => acc + (['chinese', 'math', 'english'].includes(sub) ? 150 : 100), 0);
-  
-            if (result.totalScore >= maxPossible) { rank = 1; } 
-            else {
-                const ratio = maxPossible > 0 ? result.totalScore / maxPossible : 0;
-                const percentile = 1 / (1 + Math.exp(-1.702 * ((ratio - 0.68) / 0.15)));
-                rank = Math.max(1, Math.floor(totalStudents * (1 - percentile)) + 1);
-            }
-            
-            if (rank === 1) unlockAchievement('top_rank');
-            if (rank > totalStudents * 0.98) unlockAchievement('bottom_rank');
-            if (prev.sleepCount >= 20 && rank <= 50) unlockAchievement('sleep_god');
-            
-            let perfectScore = false;
-            Object.entries(result.scores).forEach(([sub, score]) => {
-                const max = ['chinese', 'math', 'english'].includes(sub) ? 150 : 100;
-                if (!['CSP_EXAM', 'NOIP_EXAM'].includes(prev.phase) && score >= max) perfectScore = true;
-            });
-            if (perfectScore) unlockAchievement('nerd');
-  
-            let hasFailed = false;
-            Object.entries(result.scores).forEach(([sub, score]) => {
-                 const max = ['chinese', 'math', 'english'].includes(sub) ? 150 : 100;
-                 if (score / max <= 0.6) hasFailed = true;
-            });
-            if (hasFailed) triggeredEvent = BASE_EVENTS['exam_fail_talk'];
-  
-            if (prev.phase === Phase.PLACEMENT_EXAM) {
-                if (result.totalScore > 540) { className = "一类实验班"; efficiencyMod = 4; }
-                else if (result.totalScore > 480) { className = "二类实验班"; efficiencyMod = 2; }
-                else { className = "普通班"; }
-                nextPhase = Phase.SEMESTER_1; nextTotalWeeks = 21;
-                logMsg = `分班考试结束，你被分配到了【${className}】。`;
-            } else if (prev.phase === Phase.MIDTERM_EXAM) {
-                nextPhase = Phase.SUBJECT_RESELECTION; midtermRank = rank;
-                logMsg = `期中考试结束，年级排名: ${rank}。`;
-            } else if (prev.phase === Phase.CSP_EXAM) {
-                const award = result.totalScore >= 170 ? "一等奖" : result.totalScore >= 140 ? "二等奖" : "三等奖";
-                popupResult = { title: "CSP-J/S 2026", score: result.totalScore, award };
-            } else if (prev.phase === Phase.NOIP_EXAM) {
-                const award = result.totalScore >= 144 ? "省一等奖" : result.totalScore >= 112 ? "省二等奖" : "省三等奖";
-                popupResult = { title: "NOIP 2026", score: result.totalScore, award };
-                if (award === "省一等奖") unlockAchievement('oi_god');
-            } else if (prev.phase === Phase.FINAL_EXAM) {
-                nextPhase = Phase.ENDING;
-            }
+        const rank = calculateRank(result.totalScore, state.phase);
+        const resultWithRank = { ...result, rank };
+        
+        let newClassName = state.className;
+        if (state.phase === Phase.PLACEMENT_EXAM) {
+             if (rank <= 40) newClassName = "一类实验班";
+             else if (rank <= 80) newClassName = "二类实验班";
+             else newClassName = "普通班";
+        }
 
-            // For normal exams, show result popup then proceed
-            if (!popupResult && prev.phase !== Phase.ENDING) {
-                popupExamResult = { ...result, rank, totalStudents, nextPhase };
-            }
-
-            return {
-                ...prev, className,
-                general: { ...prev.general, efficiency: prev.general.efficiency + efficiencyMod },
-                phase: popupResult ? prev.phase : (popupExamResult ? prev.phase : nextPhase), // If popup, stay to show it
-                totalWeeksInPhase: nextTotalWeeks,
-                examResult: { ...result, rank, totalStudents },
-                midtermRank, currentEvent: triggeredEvent,
-                popupCompetitionResult: popupResult,
-                popupExamResult,
-                log: [...prev.log, { message: logMsg || `${prev.phase} 结束。`, type: 'info', timestamp: Date.now() }]
-            };
-        });
-    };
-
-    const closeCompetitionPopup = () => {
-        setState(prev => ({
-            ...prev, popupCompetitionResult: null,
-            competitionResults: prev.popupCompetitionResult ? [...prev.competitionResults, prev.popupCompetitionResult] : prev.competitionResults,
-            phase: Phase.SEMESTER_1, isPlaying: true
+        setState(prev => ({ 
+            ...prev, 
+            examResult: resultWithRank, 
+            popupExamResult: resultWithRank,
+            midtermRank: state.phase === Phase.MIDTERM_EXAM ? rank : prev.midtermRank,
+            className: newClassName
         }));
     };
-
+    
+    const closeCompetitionPopup = () => setState(prev => ({ ...prev, popupCompetitionResult: null }));
+    
     const closeExamResult = () => {
         setState(prev => {
-             if (!prev.popupExamResult) return prev;
-             return { ...prev, popupExamResult: null, phase: prev.popupExamResult.nextPhase || prev.phase, isPlaying: true };
+            const nextState = { ...prev, popupExamResult: null };
+            
+            // Logic to return from Exam Phases
+            if (prev.phase === Phase.MIDTERM_EXAM) {
+                 // Return to Semester 1, continue from week 11
+                 return { ...nextState, phase: Phase.SEMESTER_1, week: 12, isPlaying: true };
+            }
+            if (prev.phase === Phase.PLACEMENT_EXAM) {
+                 return { ...nextState, phase: Phase.SEMESTER_1, week: 1, totalWeeksInPhase: 21, isPlaying: true };
+            }
+            if (prev.phase === Phase.FINAL_EXAM) {
+                 return { ...nextState, phase: Phase.ENDING, isPlaying: false };
+            }
+            
+            // For other exams (CSP/NOIP) that happen mid-semester or separate phases
+            if ([Phase.CSP_EXAM, Phase.NOIP_EXAM].includes(prev.phase)) {
+                // If it was an interrupt, we might need to go back
+                // But simplified logic usually just advances
+                 return { ...nextState, phase: Phase.SEMESTER_1, isPlaying: true };
+            }
+
+            return { ...nextState, isPlaying: true };
         });
     };
 
+    const closeMiniGame = (res: Partial<GameState>) => setState(prev => ({ ...prev, activeMiniGame: null, ...res }));
+    
+    // Filter weekend options based on Reality Mode
+    const weekendOptions = WEEKEND_ACTIVITIES.filter(a => {
+        if (state.availableWeekendActivityIds) {
+            return state.availableWeekendActivityIds.includes(a.id) && (!a.condition || a.condition(state));
+        }
+        return !a.condition || a.condition(state);
+    });
+
     return {
-        state, setState, weekendResult, setWeekendResult, hasSave, saveGame, loadGame, unlockAchievement,
-        startGameState, processWeekStep, handleChoice, handleEventConfirm, handleClubSelect, 
-        handleShopPurchase, handleWeekendActivityClick, confirmWeekendActivity, 
-        handleExamFinish, closeCompetitionPopup, closeExamResult, weekendOptions
+        state, setState, weekendResult, setWeekendResult, hasSave, saveGame, loadGame,
+        startGameState, handleChoice, handleEventConfirm, handleClubSelect, handleShopPurchase, 
+        handleWeekendActivityClick, confirmWeekendActivity, handleExamFinish, closeCompetitionPopup, closeExamResult, closeMiniGame,
+        weekendOptions
     };
 };

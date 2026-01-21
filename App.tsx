@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Difficulty, GeneralStats, Talent, Phase, GameState } from './types';
+import { Difficulty, GeneralStats, Talent, Phase, GameState, Challenge } from './types';
 import { DIFFICULTY_PRESETS } from './data/constants';
 import { CLUBS, SHOP_ITEMS, ACHIEVEMENTS, TALENTS } from './data/mechanics';
 import { useGameLogic } from './hooks/useGameLogic';
@@ -26,9 +26,10 @@ const App: React.FC = () => {
   const [showRealityGuide, setShowRealityGuide] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showAchievements, setShowAchievements] = useState(false);
+  const [pendingChallenge, setPendingChallenge] = useState<Challenge | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  // Floating Text Visuals
+  // ... existing Floating Text Logic ...
   const [floatingTexts, setFloatingTexts] = useState<FloatingTextItem[]>([]);
   const spawnFloatingText = (text: string, x: number, y: number, type: string) => {
       let color = '#374151';
@@ -73,7 +74,7 @@ const App: React.FC = () => {
   const { 
       state, setState, weekendResult, setWeekendResult, hasSave, saveGame, loadGame,
       startGameState, handleChoice, handleEventConfirm, handleClubSelect, handleShopPurchase, 
-      handleWeekendActivityClick, confirmWeekendActivity, handleExamFinish, closeCompetitionPopup, closeExamResult,
+      handleWeekendActivityClick, confirmWeekendActivity, handleExamFinish, closeCompetitionPopup, closeExamResult, closeMiniGame,
       weekendOptions 
   } = useGameLogic();
 
@@ -84,18 +85,21 @@ const App: React.FC = () => {
 
   // Check for Club Selection Trigger from Logic
   React.useEffect(() => {
-      if (state.phase === Phase.SEMESTER_1 && state.week === 2 && !state.club && !showClubSelection) {
+      // FIX: Use hasSelectedClub flag instead of !state.club to prevent loop or missed check
+      if (state.phase === Phase.SEMESTER_1 && state.week === 2 && !state.hasSelectedClub && !showClubSelection) {
           setShowClubSelection(true);
       }
-  }, [state.phase, state.week, state.club]);
+  }, [state.phase, state.week, state.hasSelectedClub]);
 
   // --- Talent & Start Logic ---
   const [availableTalents, setAvailableTalents] = useState<Talent[]>([]);
   const [selectedTalents, setSelectedTalents] = useState<Talent[]>([]);
   const [talentPoints, setTalentPoints] = useState(3);
 
-  const prepareGame = () => {
+  const prepareGame = (challenge?: Challenge) => {
       setWeekendResult(null); setShowClubSelection(false); setShowRealityGuide(false);
+      setPendingChallenge(challenge || null);
+      
       const pool = [...TALENTS]; // Assumes import
       const buffs = pool.filter(t => t.cost > 0).sort(() => 0.5 - Math.random()).slice(0, 5);
       const debuffs = pool.filter(t => t.cost < 0).sort(() => 0.5 - Math.random()).slice(0, 4);
@@ -106,7 +110,7 @@ const App: React.FC = () => {
   };
 
   const handleStartGame = () => {
-      startGameState(selectedDifficulty, customStats, selectedTalents);
+      startGameState(selectedDifficulty, customStats, selectedTalents, pendingChallenge);
       setView('GAME');
   };
 
@@ -149,7 +153,7 @@ const App: React.FC = () => {
           />
       );
   }
-
+  
   if (view === 'TALENTS') {
       return (
           <TalentView 
@@ -252,7 +256,7 @@ const App: React.FC = () => {
         </div>
 
         {/* --- Overlays & Modals --- */}
-        
+
         {/* Weekend Menu */}
         {state.isWeekend && !weekendResult && (
              <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm z-30 flex items-center justify-center p-4 md:p-8 animate-fadeIn">
@@ -359,7 +363,16 @@ const App: React.FC = () => {
                     </button>
                   ))}
                </div>
-               <button disabled={state.selectedSubjects.length !== 3} onClick={() => setState(prev => ({ ...prev, phase: prev.phase === Phase.SELECTION ? Phase.PLACEMENT_EXAM : Phase.SEMESTER_1 }))} className="bg-indigo-600 disabled:bg-slate-200 text-white px-12 py-4 rounded-2xl font-black text-xl shadow-xl">确认选择</button>
+               <button disabled={state.selectedSubjects.length !== 3} onClick={() => setState(prev => {
+                   const nextPhase = prev.phase === Phase.SELECTION ? Phase.PLACEMENT_EXAM : Phase.SEMESTER_1;
+                   return { 
+                       ...prev, 
+                       phase: nextPhase, 
+                       isPlaying: prev.phase === Phase.SUBJECT_RESELECTION,
+                       // Fix: Set explicit duration for Semester 1 if skipping placement exam (e.g. reselection), otherwise default (0 for placement exam)
+                       totalWeeksInPhase: nextPhase === Phase.SEMESTER_1 ? 10 : 0
+                   };
+               })} className="bg-indigo-600 disabled:bg-slate-200 text-white px-12 py-4 rounded-2xl font-black text-xl shadow-xl">确认选择</button>
             </div>
         )}
 
@@ -389,21 +402,31 @@ const App: React.FC = () => {
              </div>
         )}
 
-        {/* Shop */}
+        {/* Shop - UPDATED FIXED UI */}
         {showShop && (
-             <div className="absolute inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn" onClick={() => setShowShop(false)}>
-                 <div className="bg-white rounded-3xl p-6 md:p-8 max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl relative" onClick={e => e.stopPropagation()}>
-                     <div className="flex justify-between items-center mb-6">
-                         <div><h2 className="text-2xl font-black text-slate-800">八中小卖部</h2><p className="text-sm text-slate-500">持有金钱: <span className="text-yellow-600 font-bold">{state.general.money}</span></p></div>
-                         <button onClick={() => setShowShop(false)} className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center z-[105] text-slate-500"><i className="fas fa-times"></i></button>
+             <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 md:p-8 animate-fadeIn" onClick={() => setShowShop(false)}>
+                 <div className="bg-white rounded-3xl w-full max-w-2xl h-[90vh] md:h-auto md:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden relative" onClick={e => e.stopPropagation()}>
+                     {/* Fixed Header */}
+                     <div className="flex-none p-6 md:p-8 border-b border-slate-100 bg-white z-10 flex justify-between items-center">
+                         <div>
+                             <h2 className="text-2xl font-black text-slate-800">小卖部</h2>
+                             <p className="text-sm text-slate-500">持有金钱: <span className="text-yellow-600 font-bold">{state.general.money}</span></p>
+                         </div>
+                         <button onClick={() => setShowShop(false)} className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+                             <i className="fas fa-times"></i>
+                         </button>
                      </div>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 overflow-y-auto custom-scroll p-1 mb-4">
-                         {SHOP_ITEMS.map(item => (
-                             <button key={item.id} onClick={() => handleShopPurchase(item, () => spawnFloatingText(`-${item.price}`, window.innerWidth/2, window.innerHeight/2, 'money'))} disabled={state.general.money < item.price} className="p-4 rounded-xl border border-slate-100 hover:border-indigo-500 hover:bg-indigo-50 transition-all text-left flex items-center gap-4 group disabled:opacity-50">
-                                 <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:text-indigo-600"><i className={`fas ${item.icon} text-xl`}></i></div>
-                                 <div className="flex-1"><div className="flex justify-between items-center"><span className="font-bold text-slate-800">{item.name}</span><span className="text-sm font-bold text-yellow-600">{item.price} G</span></div><p className="text-xs text-slate-400 mt-1">{item.description}</p></div>
-                             </button>
-                         ))}
+                     
+                     {/* Scrollable Content */}
+                     <div className="flex-1 overflow-y-auto custom-scroll p-6 md:p-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-safe">
+                             {SHOP_ITEMS.map(item => (
+                                 <button key={item.id} onClick={() => handleShopPurchase(item, () => spawnFloatingText(`-${item.price}`, window.innerWidth/2, window.innerHeight/2, 'money'))} disabled={state.general.money < item.price} className="p-4 rounded-xl border border-slate-100 hover:border-indigo-500 hover:bg-indigo-50 transition-all text-left flex items-center gap-4 group disabled:opacity-50 active:scale-95">
+                                     <div className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-white group-hover:text-indigo-600"><i className={`fas ${item.icon} text-xl`}></i></div>
+                                     <div className="flex-1"><div className="flex justify-between items-center"><span className="font-bold text-slate-800">{item.name}</span><span className="text-sm font-bold text-yellow-600">{item.price} G</span></div><p className="text-xs text-slate-400 mt-1">{item.description}</p></div>
+                                 </button>
+                             ))}
+                        </div>
                      </div>
                  </div>
              </div>

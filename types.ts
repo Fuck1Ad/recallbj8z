@@ -2,7 +2,7 @@
 export enum Phase {
   INIT = 'INIT',
   SUMMER = 'SUMMER',          // 5周
-  MILITARY = 'MILITARY',      // 1周
+  MILITARY = 'MILITARY',      // 2周
   SELECTION = 'SELECTION',    // 选科环节
   PLACEMENT_EXAM = 'PLACEMENT_EXAM', // 分班考
   SEMESTER_1 = 'SEMESTER_1',  // 21周
@@ -125,6 +125,15 @@ export interface Item {
 
 export type Theme = 'light' | 'dark';
 
+export interface Challenge {
+    id: string;
+    title: string;
+    description: string;
+    conditions: {
+        initialStats?: Partial<GeneralStats>;
+    };
+}
+
 // ------------------------------
 
 export interface GameState {
@@ -142,7 +151,8 @@ export interface GameState {
   selectedSubjects: SubjectKey[];
   competition: CompetitionType;
   club: ClubId | null; // New Club State
-  
+  hasSelectedClub: boolean; // ADDED: Flag to ensure club selection happens once
+
   romancePartner: string | null;
   className: string; 
   log: GameLogEntry[];
@@ -165,15 +175,24 @@ export interface GameState {
   unlockedAchievements: string[]; // IDs only
   achievementPopup: Achievement | null; // For toast notification
   difficulty: Difficulty;
+  activeChallengeId: string | null; // For Weekly Challenges
   
   // Weekend System
   isWeekend: boolean;
   weekendActionPoints: number;
   weekendProcessed: boolean; // Flag to prevent infinite weekend loop
+  availableWeekendActivityIds?: string[]; // Added: For Reality Mode limitation
   
+  // Mini Game System
+  activeMiniGame: 'AUTUMN_TRIP' | null;
+
   // Stats for Achievements
   sleepCount: number;
   rejectionCount: number; // Added: Count of "Nice Person Cards"
+  
+  // Challenge Specific Flags
+  hasSleptThisWeek?: boolean;
+  dreamtExam?: boolean;
 
   // New Feature States
   talents: Talent[];
@@ -205,6 +224,9 @@ export interface GameEvent {
   triggerType?: EventTriggerType;
   fixedPhase?: Phase;
   fixedWeek?: number;
+  
+  // MiniGame Trigger
+  miniGameId?: 'AUTUMN_TRIP';
 }
 
 export interface EventChoice {
@@ -212,6 +234,8 @@ export interface EventChoice {
   resultDescription?: string;
   // Make chaining explicit for the editor
   nextEventId?: string; 
+  // ADDED: Condition for the choice to appear
+  condition?: (state: GameState) => boolean;
   action: (state: GameState) => Partial<GameState>;
 }
 

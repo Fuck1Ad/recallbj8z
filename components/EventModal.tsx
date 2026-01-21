@@ -11,6 +11,9 @@ interface EventModalProps {
 }
 
 const EventModal: React.FC<EventModalProps> = ({ event, state, eventResult, onChoice, onConfirm }) => {
+    // Filter choices: Show if no condition OR condition is met
+    const visibleChoices = event.choices?.filter(c => !c.condition || c.condition(state)) || [];
+
     return (
         <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 md:p-8 z-20 animate-fadeIn">
                <div className="bg-white rounded-3xl shadow-2xl p-6 md:p-8 max-w-xl w-full border border-slate-200 max-h-[85vh] overflow-y-auto custom-scroll transition-colors">
@@ -26,8 +29,8 @@ const EventModal: React.FC<EventModalProps> = ({ event, state, eventResult, onCh
                             : event.description}
                       </p>
                       <div className="space-y-3">
-                         {event.choices?.map((c, i) => (
-                           <button key={i} onClick={(e) => onChoice(c, e)} className="w-full text-left p-4 rounded-2xl bg-slate-50 hover:bg-indigo-600 hover:text-white border border-slate-200 transition-all font-bold group flex justify-between items-center active:scale-95 text-slate-800">
+                         {visibleChoices.map((c, i) => (
+                           <button key={i} onClick={(e) => onChoice(c, e)} className={`w-full text-left p-4 rounded-2xl border transition-all font-bold group flex justify-between items-center active:scale-95 ${c.text.includes('【睡神】') ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white' : 'bg-slate-50 border-slate-200 text-slate-800 hover:bg-indigo-600 hover:text-white'}`}>
                               {c.text}
                               <i className="fas fa-chevron-right opacity-0 group-hover:opacity-100 transition-all"></i>
                            </button>

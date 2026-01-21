@@ -2,6 +2,7 @@
 import { Difficulty, GeneralStats } from '../types';
 
 export const CHANGELOG_DATA = [
+    { version: 'v1.2/testing', date: '2026-1-21', content: ['实装了每日挑战','修复了已知问题'] },
     { version: 'v1.1.2/testing', date: '2026-1-15', content: ['1.2试运行','修改了主页','增加了深色模式和存档功能（可能会有若干bug）','添加了若干事件和成就'] },
     { version: 'v1.1.1', date: '2026-1-11', content: ['修bug，增加金主位，欢迎赞助','感谢大家的反馈，大更新预计在1.20左右上线（截至该版本上线，已收到来自15+省区的~50份反馈问卷，真的感谢大家的支持，给大家磕一个）'] },
     { version: 'v1.1.0', date: '2026-1-4', content: ['我们调整了很多东西，请您自行游玩体验','此版本并不足够稳定，可能存在若干Bug'] },
@@ -10,9 +11,9 @@ export const CHANGELOG_DATA = [
 
 // --- Mechanic Constants ---
 export const MECHANICS_CONFIG = {
-    GENERAL_REGRESSION_RATE: 0.02, // 2% regression per week for general stats (towards baseline)
-    EFFICIENCY_REGRESSION_RATE: 0.05, // 5% regression per week for efficiency (harder to maintain high focus)
-    SUBJECT_DECAY_RATE: 0.01 // 1% natural forgetting per week for subjects
+    GENERAL_REGRESSION_RATE: 0.05, // 5% regression per week for general stats (towards baseline)
+    EFFICIENCY_REGRESSION_RATE: 0.15, // 15% regression per week for efficiency (harder to maintain high focus)
+    SUBJECT_DECAY_RATE: 0.02 // 2% natural forgetting per week for subjects
 };
 
 export const DIFFICULTY_PRESETS: Record<Exclude<Difficulty, 'CUSTOM'>, { label: string, desc: string, stats: GeneralStats, color: string }> = {

@@ -40,26 +40,67 @@ const ExamView: React.FC<ExamViewProps> = ({ title, state, onFinish }) => {
        return [];
   });
 
+  // --- DIFFICULTY CONFIGURATION ---
+  // Lower is easier (divider), Higher is harder
+  const getDifficultyModifier = (phase: Phase): number => {
+      switch (phase) {
+          case Phase.PLACEMENT_EXAM: return 1.0; // 新手福利，很容易高分
+          case Phase.MIDTERM_EXAM: return 1.2;   // 标准难度
+          case Phase.FINAL_EXAM: return 1.5;     // 期末地狱难度，检验一学期成果
+          case Phase.CSP_EXAM: return 1.1;       // OI入门
+          case Phase.NOIP_EXAM: return 1.5;      // 省选难度，非常难
+          default: return 1.0;
+      }
+  };
+
   useEffect(() => {
     if (examStep < subjectsToTest.length) {
       const subjectKey = subjectsToTest[examStep];
       const isOI = state.phase === Phase.CSP_EXAM || state.phase === Phase.NOIP_EXAM;
+      const difficultyMod = getDifficultyModifier(state.phase);
       
       const timer = setTimeout(() => {
         let score = 0;
         let maxScore = 100;
         let logMsg = '';
+        let extraLog = '';
+
+        // --- LUCK MECHANIC REWORKED ---
+        // 1. Base Multiplier: 0.9 ~ 1.1 (Standard Variance)
+        let luckMultiplier = 1.0 + (Math.random() * 0.2 - 0.1);
+        
+        // 2. Luck Stat Influence (Luck 0 -> -10%, Luck 100 -> +10%)
+        luckMultiplier += (state.general.luck - 50) / 500;
+
+        // 3. Critical Hit Mechanic (Lucky Shot)
+        // Chance to crit increases with Luck. Luck 50 = 5% chance, Luck 100 = 15% chance.
+        const critChance = Math.max(0, state.general.luck - 20) / 500; 
+        if (Math.random() < critChance) {
+            luckMultiplier += 0.25; // Huge bonus
+            extraLog = ' (超常发挥！)';
+        }
+
+        // 4. Bad Luck Fumble
+        // Chance to fumble decreases with Luck. Luck 0 = 10% chance, Luck 100 = 0%.
+        const fumbleChance = Math.max(0, (50 - state.general.luck) / 500);
+        if (Math.random() < fumbleChance) {
+            luckMultiplier -= 0.2;
+            extraLog = ' (失误了...)';
+        }
+
+        // Mindset Stability: Low mindset increases risk of bad variance
+        if (state.general.mindset < 30) {
+            luckMultiplier -= Math.random() * 0.1;
+        }
 
         if (isOI) {
              const prob = oiProblems[examStep];
              maxScore = 100;
              const stats = state.oiStats;
              
-             // Base performance on relevant stat
              let ability = 0;
              let required = 0;
              
-             // Weighted ability based on problem profile
              if (prob.difficulty.dp > 0) { ability += stats.dp; required += prob.difficulty.dp; }
              if (prob.difficulty.ds > 0) { ability += stats.ds; required += prob.difficulty.ds; }
              if (prob.difficulty.math > 0) { ability += stats.math; required += prob.difficulty.math; }
@@ -67,32 +108,19 @@ const ExamView: React.FC<ExamViewProps> = ({ title, state, onFinish }) => {
              if (prob.difficulty.graph > 0) { ability += stats.graph; required += prob.difficulty.graph; }
              if (prob.difficulty.misc > 0) { ability += stats.misc; required += prob.difficulty.misc; }
              
-             // Misc base capability from general intelligence/math
              ability += state.subjects.math.aptitude * 0.1; 
-             
-             // Difficulty scaling - INCREASED DIFFICULTY MULTIPLIER to nerf easy wins
-             const difficultyFactor = (required * 7.5); 
-             
-             // Score Calc
-             let ratio = ability / Math.max(1, difficultyFactor);
-             
-             // RNG Factors
-             const luckFactor = (state.general.luck - 50) / 400; // +/- 0.125
-             const mindsetFactor = (state.general.mindset - 50) / 400;
+             ability += state.subjects.math.level * 0.5;
 
-             // Difficulty Mode Modifier
-             let modeMod = 0.7;
-             if (state.difficulty === 'NORMAL') modeMod = 1.0; 
-             if (state.difficulty === 'REALITY') modeMod = 0.5; // Slightly harder nerf for reality
-
-             const finalRatio = (ratio + luckFactor + mindsetFactor) * modeMod;
+             // Difficulty scaling applied to the requirement
+             const difficultyFactor = Math.max(1, required * 3.0 * difficultyMod); 
              
-             // Clamping for partial points logic
-             if (finalRatio >= 0.98) score = 100; // Harder to get AK
-             else if (finalRatio <= 0.15) score = 0;
-             else score = Math.floor(Math.pow(finalRatio, 0.8) * 100);
+             let rawRatio = ability / difficultyFactor;
+             let finalRatio = rawRatio * luckMultiplier;
              
-             logMsg = `题目 "${prob.name}" (难度:${prob.level}) 测试结束，获得 ${score} 分。`;
+             if (finalRatio >= 0.95) score = 100; 
+             else score = Math.floor(Math.min(100, finalRatio * 100));
+             
+             logMsg = `题目 "${prob.name}" 测试结束，获得 ${score} 分${extraLog}。`;
 
         } else {
             // Standard Exam Logic
@@ -101,29 +129,29 @@ const ExamView: React.FC<ExamViewProps> = ({ title, state, onFinish }) => {
             maxScore = isMainSubject ? 150 : 100;
             
             const stats = state.subjects[subject];
-            // Nerfed formula: Harder to get full marks
-            // New Formula: (Aptitude * 0.2 + Level * 1.0) / 80  -- Reduced multipliers heavily
-            let basePercentage = (stats.aptitude * 0.2 + stats.level * 1.0) / 80;
-            basePercentage = Math.max(0.3, basePercentage); 
-
-            const luckFactor = (state.general.luck - 50) / 500; 
-            const mindsetFactor = (state.general.mindset - 50) / 500;
-            const efficiencyFactor = (state.general.efficiency - 10) / 200;
             
-            // Random variance 0.85 - 1.15 (Wider range)
-            const randomVar = 0.85 + Math.random() * 0.3; 
-
-            let finalPercentage = (basePercentage + luckFactor + mindsetFactor + efficiencyFactor) * randomVar;
-            finalPercentage = Math.min(1.0, Math.max(0, finalPercentage));
+            // Formula: (Aptitude * 0.4 + Level * 3.0) / DifficultyMod
+            // Example Final Exam (Diff 1.3):
+            // Apt 80, Lvl 20 -> (32 + 60) / 1.3 = 70.7 (70% score) -> OK
+            // Apt 80, Lvl 10 -> (32 + 30) / 1.3 = 47.6 (47% score) -> Fail
             
-            // Curve the score slightly towards the middle-high range for realism, but harder to get perfect
-            finalPercentage = Math.pow(finalPercentage, 0.9);
+            let basePercentage = (stats.aptitude * 0.4 + stats.level * 3.0);
+            
+            // Apply Difficulty scaling
+            basePercentage = basePercentage / difficultyMod;
+
+            // Efficiency Bonus
+            if (state.general.efficiency > 15) {
+                basePercentage += (state.general.efficiency - 15) * 1.0;
+            }
+
+            let finalScoreRaw = basePercentage * luckMultiplier;
+
+            // Cap at 100% relative
+            let finalPercentage = Math.min(100, Math.max(5, finalScoreRaw)) / 100;
 
             score = Math.floor(finalPercentage * maxScore);
-            // Cap at max score
-            if (score > maxScore) score = maxScore;
-
-            logMsg = `${SUBJECT_NAMES[subject]} 考试结束，得分 ${score}/${maxScore}。`;
+            logMsg = `${SUBJECT_NAMES[subject]} 考试结束，得分 ${score}/${maxScore}${extraLog}。`;
         }
 
         setCurrentScores(prev => ({ ...prev, [subjectKey]: score }));
@@ -140,19 +168,21 @@ const ExamView: React.FC<ExamViewProps> = ({ title, state, onFinish }) => {
       const total = (Object.values(currentScores) as number[]).reduce((a, b) => a + b, 0);
       
       let comment = "继续努力。";
+      // Comments based on relative performance (Phase sensitive)
+      const maxTotal = subjectsToTest.reduce((acc, s) => acc + (['chinese', 'math', 'english'].includes(s) ? 150 : 100), 0);
+      const ratio = total / maxTotal;
+
       if (state.phase === Phase.CSP_EXAM || state.phase === Phase.NOIP_EXAM) {
           if (total >= 300) comment = "神乎其技，你就是机房的传说！";
           else if (total >= 200) comment = "发挥稳定，应该能拿奖。";
           else if (total >= 100) comment = "有些遗憾，明年再战。";
           else comment = "技不如人，甘拜下风。";
       } else {
-          // 普通考试评价
-          const maxTotal = subjectsToTest.reduce((acc, s) => acc + (['chinese', 'math', 'english'].includes(s) ? 150 : 100), 0);
-          const ratio = total / maxTotal;
-          if (ratio > 0.95) comment = "傲视群雄，你是八中当之无愧的传说，老师口中的“那个学生”！"; 
-          else if (ratio > 0.85) comment = "表现优异，保持在这个梯队。";
-          else if (ratio > 0.70) comment = "中规中矩，还有提升空间。";
-          else comment = "基础不牢，地动山摇。";
+          if (ratio > 0.90) comment = "傲视群雄，你是八中当之无愧的传说！"; 
+          else if (ratio > 0.80) comment = "表现优异，稳居年级前列。";
+          else if (ratio > 0.70) comment = "成绩良好，未来可期。";
+          else if (ratio > 0.60) comment = "中规中矩，还需要加把劲。";
+          else comment = "基础不牢，地动山摇，要小心了。";
       }
 
       onFinish({
@@ -181,7 +211,7 @@ const ExamView: React.FC<ExamViewProps> = ({ title, state, onFinish }) => {
         {examLogs.map((log, i) => (
           <div key={i} className="flex gap-4 items-start animate-fadeIn">
             <span className="text-slate-400">[{new Date().toLocaleTimeString()}]</span>
-            <span className="text-slate-700">{log}</span>
+            <span className={`text-slate-700 ${log.includes('超常发挥') ? 'text-amber-600 font-bold' : log.includes('失误') ? 'text-rose-600' : ''}`}>{log}</span>
           </div>
         ))}
         {examStep < subjectsToTest.length && (

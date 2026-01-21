@@ -1,7 +1,8 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { GameState, Phase } from '../types';
 import { DIFFICULTY_PRESETS } from '../data/constants';
+import { uploadScore } from '../lib/supabase';
 
 interface EndingScreenProps {
     state: GameState;
@@ -11,6 +12,32 @@ interface EndingScreenProps {
 }
 
 const EndingScreen: React.FC<EndingScreenProps> = ({ state, endingData, onRestart, onViewHistory }) => {
+    const [uploadStatus, setUploadStatus] = useState<'IDLE' | 'UPLOADING' | 'SUCCESS' | 'ERROR'>('IDLE');
+    const [playerName, setPlayerName] = useState('');
+    const [showNameInput, setShowNameInput] = useState(false);
+
+    const handleUpload = async () => {
+        if (!playerName.trim()) return;
+        setUploadStatus('UPLOADING');
+        try {
+            await uploadScore({
+                player_name: playerName,
+                score: endingData.score,
+                challenge_id: state.activeChallengeId,
+                difficulty: state.difficulty,
+                details: {
+                    title: endingData.title,
+                    rank: endingData.rank
+                }
+            });
+            setUploadStatus('SUCCESS');
+            setShowNameInput(false);
+        } catch (e) {
+            console.error(e);
+            setUploadStatus('ERROR');
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md text-slate-800 flex flex-col items-center justify-center p-4 md:p-6 animate-fadeIn overflow-y-auto">
                 <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl flex flex-col md:flex-row overflow-hidden border-4 border-slate-800 relative shrink-0">
@@ -37,7 +64,8 @@ const EndingScreen: React.FC<EndingScreenProps> = ({ state, endingData, onRestar
 
                          {state.difficulty && (
                              <div className="mb-6 inline-block px-3 py-1 rounded bg-slate-200 text-slate-600 text-xs font-bold">
-                                 难度: {DIFFICULTY_PRESETS[state.difficulty]?.label || '自定义'}
+                                 难度: {DIFFICULTY_PRESETS[state.difficulty]?.label || '自定义'} 
+                                 {state.activeChallengeId ? ' (挑战模式)' : ''}
                              </div>
                          )}
                          
@@ -92,6 +120,31 @@ const EndingScreen: React.FC<EndingScreenProps> = ({ state, endingData, onRestar
 
                     {/* Right Column: Highlights & Achievements */}
                     <div className="flex-1 p-8 flex flex-col bg-white">
+                        {/* Name Input Modal Overlay */}
+                        {showNameInput && (
+                            <div className="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center p-8 animate-fadeIn">
+                                <h3 className="text-2xl font-black mb-4">留下个名字喵？</h3>
+                                <input 
+                                    type="text" 
+                                    placeholder="请不要乱写敏感内容啊……维护这个很麻烦的qwq" 
+                                    value={playerName}
+                                    onChange={e => setPlayerName(e.target.value)}
+                                    className="w-full max-w-xs p-4 bg-slate-100 rounded-xl border-2 border-slate-200 focus:border-indigo-500 outline-none font-bold text-center mb-4"
+                                    maxLength={12}
+                                />
+                                <div className="flex gap-2">
+                                    <button onClick={() => setShowNameInput(false)} className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100">取消</button>
+                                    <button 
+                                        onClick={handleUpload} 
+                                        disabled={!playerName.trim() || uploadStatus === 'UPLOADING'}
+                                        className="px-8 py-3 rounded-xl font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg disabled:opacity-50"
+                                    >
+                                        {uploadStatus === 'UPLOADING' ? '上传中...' : '确认上传'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {state.talents.length > 0 && (
                             <div className="mb-6">
                                 <h3 className="font-black text-slate-400 uppercase text-xs mb-3">天赋</h3>
@@ -137,9 +190,16 @@ const EndingScreen: React.FC<EndingScreenProps> = ({ state, endingData, onRestar
                                  <button onClick={onRestart} className="flex-1 bg-slate-900 text-white py-4 rounded-2xl font-black text-lg hover:bg-slate-800 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 flex items-center justify-center gap-2">
                                      <i className="fas fa-redo-alt"></i> 再来一年
                                  </button>
-                                 <button onClick={onViewHistory} className="px-6 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-colors">
-                                     <i className="fas fa-history"></i>
-                                 </button>
+                                 
+                                 {uploadStatus === 'SUCCESS' ? (
+                                      <button disabled className="px-6 bg-emerald-100 text-emerald-600 rounded-2xl font-bold flex items-center gap-2 cursor-default">
+                                         <i className="fas fa-check"></i> 已上传
+                                      </button>
+                                 ) : (
+                                     <button onClick={() => setShowNameInput(true)} className="px-6 bg-indigo-100 text-indigo-600 rounded-2xl font-bold hover:bg-indigo-200 transition-colors flex items-center gap-2">
+                                         <i className="fas fa-cloud-upload-alt"></i> 上传成绩
+                                     </button>
+                                 )}
                              </div>
                         </div>
                     </div>

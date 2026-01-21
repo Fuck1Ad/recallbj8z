@@ -2,13 +2,16 @@
 import { GameEvent } from '../types';
 import { modifySub } from './utils';
 import { STATUSES } from './mechanics';
+import { Phase } from '../types';
 
 export const SCIENCE_FESTIVAL_EVENT: GameEvent = {
     id: 'evt_sci_fest',
     title: '科技节',
-    description: '一年一度的科技节开始了，全校停课一天。操场上摆满了各个社团和班级的展台。',
+    description: '一年一度的科技节开始了，地下场馆摆满了各个社团和班级的展台。',
     type: 'positive',
     triggerType: 'FIXED',
+    fixedPhase: Phase.SEMESTER_1,
+    fixedWeek: 15, // Fixed at Week 15
     choices: [
         { 
             text: '参观展览', 
@@ -33,6 +36,8 @@ export const NEW_YEAR_GALA_EVENT: GameEvent = {
     description: '新年的钟声即将敲响，班级里正如火如荼地举办元旦联欢会。',
     type: 'positive',
     triggerType: 'FIXED',
+    fixedPhase: Phase.SEMESTER_1,
+    fixedWeek: 20, // Fixed at Week 20
     choices: [
         { 
             text: '欣赏节目', 
@@ -120,7 +125,7 @@ export const CHAINED_EVENTS: Record<string, GameEvent> = {
             action: (s) => ({ 
                 general: { ...s.general, mindset: s.general.mindset - 20 },
                 rejectionCount: (s.rejectionCount || 0) + 1,
-                log: [...s.log, { message: "被发好人卡了... (被拒绝次数+1)", type: 'warning', timestamp: Date.now() }] 
+                log: [...s.log, { message: "被发好人卡了... ", type: 'warning', timestamp: Date.now() }] 
             }) 
         }]   
     },
@@ -134,7 +139,7 @@ export const CHAINED_EVENTS: Record<string, GameEvent> = {
     'evt_red_packet': {
         id: 'evt_red_packet',
         title: '新年红包',
-        description: '过年了，亲戚们最关心的果然还是期中考试的成绩...',
+        description: '过年了，亲戚们最关心的果然还是考试的成绩...',
         type: 'positive',
         choices: [{
             text: '收下红包',
