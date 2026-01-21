@@ -6,7 +6,7 @@ import {
     EventChoice, ExamResult, ClubId, Item, WeekendActivity
 } from '../types';
 import { DIFFICULTY_PRESETS } from '../data/constants';
-import { PHASE_EVENTS, generateSummerLifeEvent, generateStudyEvent, generateOIEvent, generateRandomFlavorEvent } from '../data/events';
+import { PHASE_EVENTS, BASE_EVENTS, generateSummerLifeEvent, generateStudyEvent, generateOIEvent, generateRandomFlavorEvent } from '../data/events';
 import { WEEKEND_ACTIVITIES, STATUSES, ACHIEVEMENTS } from '../data/mechanics';
 import { modifyOI, modifySub } from '../data/utils';
 
@@ -126,7 +126,7 @@ export const useGameLogic = () => {
 
     // --- Achievement Check Effect ---
     useEffect(() => {
-        if (!state.difficulty || state.difficulty !== 'REALITY') return; // Only verify in Reality mode usually, or allow all? User didn't specify. Let's allow all for fun but maybe highlight difficulty.
+        if (!state.difficulty || state.difficulty !== 'REALITY') return; // Only verify in Reality mode
 
         const newUnlocked: string[] = [];
         const add = (id: string) => { 
@@ -143,13 +143,19 @@ export const useGameLogic = () => {
 
         // Check Exam Results (Happens when exam result is present)
         if (state.examResult) {
+            // FIX: OI Exams should NOT trigger academic rank achievements
+            const isOI = [Phase.CSP_EXAM, Phase.NOIP_EXAM].includes(state.phase);
+
             // Rank 1
-            if (state.examResult.rank === 1) add('top_rank');
+            if (!isOI && state.examResult.rank === 1) add('top_rank');
             // Last Rank
-            if (state.examResult.totalStudents && state.examResult.rank === state.examResult.totalStudents) add('bottom_rank');
+            if (!isOI && state.examResult.totalStudents && state.examResult.rank === state.examResult.totalStudents) add('bottom_rank');
             
             // Nerd: Check if any subject is max score (100 or 150)
             const isFullScore = Object.entries(state.examResult.scores).some(([subj, score]) => {
+                // FIX: Ignore OI problems for Nerd achievement
+                if (subj.startsWith('oi_prob')) return false;
+                
                 const max = ['chinese', 'math', 'english'].includes(subj) ? 150 : 100;
                 return score >= max;
             });
@@ -166,7 +172,7 @@ export const useGameLogic = () => {
             
             setTimeout(() => setState(prev => ({ ...prev, achievementPopup: null })), 3000);
         }
-    }, [state.general, state.sleepCount, state.rejectionCount, state.examResult, state.difficulty, state.unlockedAchievements]);
+    }, [state.general, state.sleepCount, state.rejectionCount, state.examResult, state.difficulty, state.unlockedAchievements, state.phase]);
 
 
     // --- MAIN GAME LOOP ---
@@ -219,6 +225,48 @@ export const useGameLogic = () => {
                 return;
             }
 
+            // --- Pre-Event Logic: Debt Check & Status Update ---
+            setState(prev => {
+                const currentMoney = prev.general.money;
+                let debtLevel = 0;
+                if (currentMoney < -800) debtLevel = 5;
+                else if(currentMoney < -350)debtLevel=4;
+                else if (currentMoney < -180) debtLevel = 3;
+                else if (currentMoney < -80) debtLevel = 2;
+                else if (currentMoney < 0) debtLevel = 1;
+
+                // Remove existing debt statuses
+                const cleanStatuses = prev.activeStatuses.filter(s => !s.id.startsWith('debt_'));
+                
+                // Add new debt status if needed
+                let newStatuses = [...cleanStatuses];
+                let penaltyMindset = 0;
+                let penaltyRomance = 0;
+
+                if (debtLevel > 0) {
+                    newStatuses.push({ ...STATUSES[`debt_${debtLevel}`], duration: 1 }); // Duration 1 ensures it's re-evaluated or effectively permanent
+                    // Calculate Penalty
+                    if (debtLevel === 1) { penaltyMindset = 5; penaltyRomance = 3; }
+                    if (debtLevel === 2) { penaltyMindset = 10; penaltyRomance = 6; }
+                    if (debtLevel === 3) { penaltyMindset = 20; penaltyRomance = 12; }
+                    if (debtLevel === 4) { penaltyMindset = 40; penaltyRomance = 24; }
+                    if (debtLevel === 5) { penaltyMindset = 80; penaltyRomance = 48; }
+                }
+
+                // If no changes needed, return prev to avoid unnecessary re-renders in effect dependency chain
+                // But since we are inside processTurn which proceeds anyway, we apply changes here.
+                
+                return {
+                    ...prev,
+                    activeStatuses: newStatuses,
+                    general: {
+                        ...prev.general,
+                        mindset: Math.max(0, prev.general.mindset - penaltyMindset),
+                        romance: Math.max(0, prev.general.romance - penaltyRomance)
+                    }
+                };
+            });
+
             // 3. Generate Week's Events
             let weekEvents: GameEvent[] = [];
             const phasePool = PHASE_EVENTS[state.phase] || [];
@@ -230,6 +278,19 @@ export const useGameLogic = () => {
                 !state.triggeredEvents.includes(e.id)
             );
             weekEvents.push(...pendingFixed);
+            
+            // 3a.2 Global Negative Triggers (e.g. Debt Collection Event)
+            // This is the "Event" trigger (someone coming to collect money), distinct from the passive debuff
+            if (state.general.money < 0) {
+                 const debt = Math.abs(state.general.money);
+                 const prob = Math.min(1, Math.sqrt(debt) / 30);
+                 
+                 if (Math.random() < prob) {
+                     if (!weekEvents.find(e => e.id === 'debt_collection')) {
+                         weekEvents.push(BASE_EVENTS['debt_collection']);
+                     }
+                 }
+            }
 
             // 3b. Conditional Events (Prioritized)
             // e.g., Confession if romance > 20
@@ -290,7 +351,10 @@ export const useGameLogic = () => {
             }
 
             // Mark fixed/conditional events as triggered
-            const eventsToMark = weekEvents.filter(e => e.once || e.triggerType === 'FIXED').map(e => e.id);
+            // NOTE: 'debt_collection' should NOT be marked as triggered permanently so it can recur
+            const eventsToMark = weekEvents
+                .filter(e => (e.once || e.triggerType === 'FIXED') && e.id !== 'debt_collection')
+                .map(e => e.id);
 
             // Set the first event and queue the rest
             const [first, ...rest] = weekEvents;
@@ -377,7 +441,9 @@ export const useGameLogic = () => {
         let initialStatuses: GameStatus[] = [];
         if (effectiveDifficulty === 'REALITY') {
             initialStatuses.push({ ...STATUSES['anxious'], duration: 4 });
-            initialStatuses.push({ ...STATUSES['debt'], duration: 2 });
+            // Remove old static 'debt' status, logic will handle it if money is low, 
+            // but if initial money is positive we don't need it.
+            // If preset has low money, the loop will catch it.
         }
         
         if (activeChallenge) {
@@ -608,7 +674,7 @@ export const useGameLogic = () => {
         
         let newClassName = state.className;
         if (state.phase === Phase.PLACEMENT_EXAM) {
-             if (rank <= 180) newClassName = "一类实验班";
+             if (rank <= 200) newClassName = "一类实验班";
              else if (rank <= 400) newClassName = "二类实验班";
              else newClassName = "普通班";
         }
