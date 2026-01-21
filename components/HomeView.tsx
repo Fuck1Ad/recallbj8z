@@ -264,6 +264,23 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
              </div>
 
              {/* Modals */}
+             
+             {showQQGroup && (
+                 <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn" onClick={() => setShowQQGroup(false)}>
+                     <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl flex flex-col items-center" onClick={e => e.stopPropagation()}>
+                         <div className="flex justify-between items-center w-full mb-6 border-b border-slate-100 pb-4">
+                             <h2 className="text-2xl font-black text-slate-800">加入组织</h2>
+                             <button onClick={() => setShowQQGroup(false)} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors"><i className="fas fa-times"></i></button>
+                         </div>
+                         <div className="bg-slate-100 p-4 rounded-2xl mb-4">
+                            <img src="https://cdn.luogu.com.cn/upload/image_hosting/rhymaxyw.png" alt="QQ Group QR" className="w-64 h-auto rounded-xl mix-blend-multiply" />
+                         </div>
+                         <p className="text-center text-slate-600 font-bold mb-2">群号: 1080382240</p>
+                         <p className="text-center text-xs text-slate-400">点击图片或长按保存扫描</p>
+                     </div>
+                 </div>
+             )}
+
              {showAchievements && (
                  <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn" onClick={() => setShowAchievements(false)}>
                     <div className="bg-white rounded-[2rem] p-8 max-w-4xl w-full h-[80vh] shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
