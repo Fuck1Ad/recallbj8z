@@ -6,7 +6,7 @@ const API_URL = "https://api.deepseek.com/chat/completions";
 const MODEL_NAME = "deepseek-chat"; 
 
 export const generateBatchGameEvents = async (state: GameState) => {
-  const apiKey = "sk-9340cd8251f8405c8d21fe45c5164909";
+  const apiKey = (import.meta as any).env?.VITE_API_KEY || (process as any).env?.API_KEY;
   if (!apiKey) {
     console.error("API Key is missing!");
     throw new Error("API Key is missing");
@@ -37,6 +37,10 @@ export const generateBatchGameEvents = async (state: GameState) => {
     
     【最近剧情】:
     ${recentHistory || "暂无，新学期开始。"}
+
+    【重要属性说明 - 请严格遵守】
+    1. **效率 (efficiency)**: 范围 0-20。通常 +1 或 -1。极少数情况 +2,+3。**绝对不要**一次性增加 >5。
+    2. **其他属性 (心态/健康/魅力等)**: 范围 0-100。通常变动幅度在 2-10 之间。
 
     【任务】
     请你根据玩家的状态，生成三个风格不同，具有北京高中生活特色的突发事件。
