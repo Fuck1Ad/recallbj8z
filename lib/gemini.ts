@@ -2,7 +2,8 @@
 import { GameState, SUBJECT_NAMES, SubjectKey } from '../types';
 
 // DeepSeek API Configuration
-const API_URL = "https://api.deepseek.com/chat/completions";
+// const API_URL = "https://api.deepseek.com/chat/completions";
+const API_URL = "https://api.chatanywhere.tech/v1/chat/completions";
 const MODEL_NAME = "deepseek-chat"; 
 
 export const generateBatchGameEvents = async (state: GameState) => {
@@ -38,14 +39,14 @@ export const generateBatchGameEvents = async (state: GameState) => {
     【最近剧情】:
     ${recentHistory || "暂无，新学期开始。"}
 
-    【重要属性说明 - 请严格遵守】
-    1. **效率 (efficiency)**: 范围 0-20。通常 +1 或 -1。极少数情况 +2,+3。**绝对不要**一次性增加 >5。
-    2. **其他属性 (心态/健康/魅力等)**: 范围 0-100。通常变动幅度在 2-10 之间。
-
     【任务】
     请你根据玩家的状态，生成三个风格不同，具有北京高中生活特色的突发事件。
     请根据玩家的【天赋】和【状态】调整事件风格（例如：有“非酋”天赋则多生成倒霉事，有“万人迷”则多生成情感类事件）。
     禁止生成与 "${recentTitles}" 雷同的主题。
+    生成的数据不能包含任何 AI 生成的标记（如“作为一个AI模型”之类的措辞），不能过于离谱，必须符合高中生的日常生活逻辑。
+    购买小物品的事件请避免过于频繁，尤其是在玩家已经拥有较多钱的情况下，以免造成游戏体验不佳，价格要合理（在2元~10元）。
+    选项不要带有明显的“好/坏”倾向，结果描述也要尽量中立，避免过于夸张的正面或负面反馈，也不能包含选择后可能的“隐藏”结果（例如：选项A表面上看是好事，但结果描述却暗示了潜在的负面后果，这种设计会让玩家感到被欺骗）。事件的类型应该根据事件本身的内容和对玩家状态的影响来合理判断，而不是简单地根据选项的表面描述来定性。
+    所有关于金钱的事件，金钱数都不能超过10。
 
     【格式要求】
     严格返回 JSON 数组，不要 Markdown 代码块。格式如下：
@@ -118,6 +119,7 @@ export const generateBatchGameEvents = async (state: GameState) => {
     return parsed;
 
   } catch (error) {
+    console.log("Using API Key:", apiKey ? ` ${apiKey}...` : "EMPTY!");
     console.error("AI API Error:", error);
     return [{
       title: "灵感枯竭",

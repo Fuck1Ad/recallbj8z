@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- 亮色模式下的图标 -->
+  <link rel="icon" type="image/svg+xml" href="/upload-light.svg" media="(prefers-color-scheme: light)" />
+  <!-- 暗色模式下的图标 -->
+  <link rel="icon" type="image/svg+xml" href="/upload-dark.svg" media="(prefers-color-scheme: dark)" />
+  <title>上传分数</title>
+  <style>
+    body{
+        font-family:system-ui,
+        -apple-system,Segoe UI,Roboto,Arial;
+        margin:40px;background:#f5f7fb
+    }
+    .card{
+        max-width:520px;
+        margin:0 auto;
+        background:#fff;
+        padding:24px;
+        border-radius:12px;
+        box-shadow:0 8px 30px rgba(30,50,80,0.08)
+    }
+    h1{
+        margin:0 0 12px;
+        font-size:20px;
+        color:#333
+    }
+    label{
+        display:block;
+        margin-top:12px;
+        color:#555;
+        font-size:14px
+    }
+    input,select,textarea{
+        width: 100%;
+        padding: 10px;
+        margin-top: 6px;
+        border: 1px solid #e6e9ef;
+        border-radius: 8px;
+        font-size: 14px;
+        box-sizing: border-box;
+        height: 40px;
+        line-height: 1.4;
+        background-color: white;
+        font-family: inherit;
+        outline: none;
+    }
+    select{
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23667eea' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 20px 20px;
+        cursor: pointer;
+        padding-right: 30px;
+    }
+    input:focus,select:focus,textarea:focus{
+        border-color: #667eea;
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+    textarea{
+        height: auto;
+        min-height: 80px;
+        resize: vertical;
+    }
+    button{
+        margin-top:16px;
+        padding:10px 16px;
+        border:0;
+        border-radius:10px;
+        background:#667eea;
+        color:#fff;
+        font-weight:600;
+        cursor:pointer
+    }
+    .hint{
+        margin-top:10px;
+        color:#666;
+        font-size:13px
+    }
+    .result{
+        margin-top:14px;
+        padding:12px;
+        border-radius:8px
+    }
+    .ok{
+        background:#ecfdf5;
+        color:#064e3b
+    }
+    .err{
+        background:#fff5f5;
+        color:#7f1d1d
+    }
+    select:focus{
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23667eea' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 12 4-4 4 4'/%3e%3c/svg%3e");
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>上传自定义分数到榜单</h1>
+    <label>玩家名称
+      <input id="player_name" placeholder="输入玩家名称" />
+    </label>
+    <label>分数
+      <input id="score" placeholder="输入分数" />
+    </label>
+    <label>难度
+      <select id="difficulty">
+        <option value="NORMAL">普通</option>
+        <option value="HARD">困难</option>
+        <option value="REALITY">现实</option>
+        <option value="AI_STORY">AI叙事</option>
+      </select>
+    </label>
+    <label>进入特定挑战榜
+      <select id="challenge_id">
+        <option value="c_sleep_king">睡觉榜</option>
+        <option value="c_debt_king">欠债榜</option>
+        <option value="">哪个都不进入</option>
+      </select>
+    </label>
+    <label>评级
+      <select id="rank">
+        <option value="SSS">SSS</option>
+        <option value="SS">SS</option>
+        <option value="S">S</option>
+        <option value="A">A</option>
+        <option value="B">B</option>
+        <option value="C">C</option>
+        <option value="自选">我哪个都不想要，我要自己输入</option>
+      </select>
+    </label>
+    <label>评价
+      <select id="title">
+        <option value="高中毕业生">高中毕业生</option>
+        <option value="遗憾离场">遗憾离场</option>
+        <option value="自选">我哪个都不想要，我要自己输入</option>
+      </select>
+    </label>
+    <button id="upload">上传分数</button>
+    <div class="hint">说明：此页面使用项目内 Supabase 表 <strong>leaderboard</strong> 的匿名 Key 直接写入。</div>
+    <div id="result" class="result" style="display:none"></div>
+  </div>
+
+  <script>
+    // 我的
+    //const SUPABASE_URL = 'https://xbtvtpfkrroxcatslfbh.supabase.co';
+    //const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhidHZ0cGZrcnJveGNhdHNsZmJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2MzgxMzgsImV4cCI6MjA4NTIxNDEzOH0.0rquSa4goz7s6bRJnG9VBHjat2YQB62Gqs40iUDimHs';
+    //原来的
+    const SUPABASE_URL = 'https://qmgfcirrgwzcmmyjnecn.supabase.co';
+    const API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFtZ2ZjaXJyZ3d6Y21teWpuZWNuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgwMzY2NzQsImV4cCI6MjA4MzYxMjY3NH0.CU4roI0pWPHARNydPu_EeUBoz7G2dtxhw9InUFSBZ80';
+
+    function showResult(success, msg) {
+      const el = document.getElementById('result');
+      el.style.display = 'block';
+      el.className = 'result ' + (success ? 'ok' : 'err');
+      el.textContent = msg;
+    }
+
+    async function upload(entry) {
+      const url = `${SUPABASE_URL}/rest/v1/leaderboard`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': API_KEY,
+          'Authorization': `Bearer ${API_KEY}`,
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify([entry])
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({message:res.statusText}));
+        throw new Error(err.message || ('状态码: ' + res.status));
+      }
+
+      return await res.json();
+    }
+
+    document.getElementById('upload').addEventListener('click', async ()=>{
+      const name = document.getElementById('player_name').value.trim();
+      const scoreVal = document.getElementById('score').value;
+      const difficulty = document.getElementById('difficulty').value || null;
+      const challenge_id = document.getElementById('challenge_id').value || null;
+
+      // 1. 获取下拉框的原始值
+      let title = document.getElementById('title').value.trim(); // 使用 let 以便修改
+      let rank = document.getElementById('rank').value.trim();   // 使用 let 以便修改
+
+      if (!name) { showResult(false,'请输入玩家名称'); return; }
+      if (scoreVal === '') { showResult(false,'请输入分数'); return; }
+      const score = Number(scoreVal);
+      if (!Number.isFinite(score)) { showResult(false,'分数必须为数字'); return; }
+
+      // 2. --- 修正逻辑：根据原始值判断并获取自定义输入框的内容 ---
+      if (title === '自选') {
+        // 获取自定义输入框元素
+        const customTitleElement = document.getElementById('custom-title-input');
+        // 安全检查：元素存在后再取值
+        if (customTitleElement) {
+            // 更新 title 变量为自定义输入框的值
+            title = customTitleElement.value.trim();
+        } else {
+            // 如果元素不存在，置为 null
+            title = null; 
+        }
+      }
+
+      if (rank === '自选') {
+        // 获取自定义输入框元素
+        const customRankElement = document.getElementById('custom-rank-input');
+        // 安全检查：元素存在后再取值
+        if (customRankElement) {
+            // 更新 rank 变量为自定义输入框的值
+            rank = customRankElement.value.trim();
+        } else {
+            // 如果元素不存在，置为 null
+            rank = null;
+        }
+      }
+
+      // 3. 构建 details 对象，只包含非 null 的字段
+      let details = null;
+      if (title !== null || rank !== null) {
+        details = {};
+        if (title !== null) details.title = title;
+        if (rank !== null) details.rank = rank;
+      }
+
+      const entry = {
+        player_name: name,
+        score: score,
+        difficulty: difficulty,
+        challenge_id: challenge_id,
+        details: details // 使用构建好的 details 对象
+      };
+
+      try {
+        document.getElementById('upload').disabled = true;
+        showResult(true,'上传中...');
+        const data = await upload(entry);
+        showResult(true,'上传成功，ID=' + (data[0]?.id || '[已写入]'));
+      } catch (e) {
+        showResult(false,'上传失败，' + (e.message || e));
+      } finally {
+        document.getElementById('upload').disabled = false;
+      }
+    });
+
+    // 也把函数暴露到 window，方便控制台调用
+    window.uploadScoreFromForm = async function(){
+      document.getElementById('upload').click();
+    };
+  </script>
+  <!-- 动态创建输入框的脚本块，放置在主逻辑之后，但确保在DOM加载完成后执行 -->
+  <script>
+  // --- 处理 #title ---
+  const titleSelect = document.getElementById('title');
+  if (titleSelect) {
+    const titleLabelDiv = document.createElement('div');
+    titleLabelDiv.textContent = '自定义评价';
+    titleLabelDiv.style.cssText = 'display:none;margin-top:12px;color:#555;font-size:14px;';
+    
+    const titleInput = document.createElement('input');
+    titleInput.id = 'custom-title-input';
+    titleInput.type = 'text';
+    titleInput.placeholder = '输入自定义评价';
+    titleInput.style.cssText = 'display:none;margin-top:8px;width:100%;padding:10px;border:1px solid #e6e9ef;border-radius:8px;';
+
+    const titleParent = titleSelect.closest('label') || titleSelect.parentElement;
+    if (titleParent) {
+      titleParent.appendChild(titleLabelDiv);
+      titleParent.appendChild(titleInput);
+    }
+
+    titleSelect.addEventListener('change', () => {
+      const show = titleSelect.value === '自选';
+      titleLabelDiv.style.display = show ? 'block' : 'none';
+      titleInput.style.display = show ? 'block' : 'none';
+      if (show) titleInput.focus();
+    });
+  }
+
+  // --- 处理 #rank ---
+  const rankSelect = document.getElementById('rank');
+  if (rankSelect) {
+    const rankLabelDiv = document.createElement('div');
+    rankLabelDiv.textContent = '自定义评级';
+    rankLabelDiv.style.cssText = 'display:none;margin-top:12px;color:#555;font-size:14px;';
+    
+    const rankInput = document.createElement('input');
+    rankInput.id = 'custom-rank-input';
+    rankInput.type = 'text';
+    rankInput.placeholder = '输入自定义评级';
+    rankInput.style.cssText = 'display:none;margin-top:8px;width:100%;padding:10px;border:1px solid #e6e9ef;border-radius:8px;';
+
+    const rankParent = rankSelect.closest('label') || rankSelect.parentElement;
+    if (rankParent) {
+      rankParent.appendChild(rankLabelDiv);
+      rankParent.appendChild(rankInput);
+    }
+
+    rankSelect.addEventListener('change', () => {
+      const show = rankSelect.value === '自选';
+      rankLabelDiv.style.display = show ? 'block' : 'none';
+      rankInput.style.display = show ? 'block' : 'none';
+      if (show) rankInput.focus();
+    });
+  }
+</script>
+</body>
+</html>
