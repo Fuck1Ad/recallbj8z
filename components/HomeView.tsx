@@ -165,7 +165,7 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                         {selectedDifficulty === 'CUSTOM' && (
                             <div className="mb-6 bg-slate-50 p-5 rounded-2xl border border-slate-200 grid grid-cols-2 gap-x-8 gap-y-3 shadow-inner">
                                {(Object.keys(customStats) as (keyof GeneralStats)[]).map(key => (
-                                   <div key={key} className="flex items-center gap-1">
+                                   <div key={key} className="flex items-center">
                                        <span className="text-[10px] font-bold text-slate-500 w-16 text-right uppercase shrink-0">{key}</span>
                                        <input 
                                            type="range" 
@@ -173,7 +173,7 @@ const HomeView: React.FC<HomeViewProps> = ({ selectedDifficulty, onDifficultyCha
                                            max="100" 
                                            value={customStats[key]} 
                                            onChange={(e) => onCustomStatsChange({...customStats, [key]: parseInt(e.target.value)})} 
-                                           className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                           className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 ml-3"
                                        />
                                        <span className="text-xs font-bold text-indigo-600 w-8 text-left shrink-0 ml-2">{customStats[key]}</span>
                                    </div>
